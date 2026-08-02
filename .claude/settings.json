@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/asutoshpatnaik/codebase/claude-full-learning/.claude/hooks/run-tests-on-stop.sh",
+            "timeout": 300,
+            "statusMessage": "Running ./mvnw test..."
+          }
+        ]
+      }
+    ]
+  }
+}
