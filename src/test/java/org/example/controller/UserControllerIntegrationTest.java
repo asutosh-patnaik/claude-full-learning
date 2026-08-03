@@ -45,8 +45,11 @@ class UserControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Value("${jwt.secret}")
-    private String jwtSecret;
+    @Value("${jwt.private-key}")
+    private String jwtPrivateKey;
+
+    @Value("${jwt.public-key}")
+    private String jwtPublicKey;
 
     @Test
     void validTokenReturnsTheCallersOwnDetails() throws Exception {
@@ -79,9 +82,9 @@ class UserControllerIntegrationTest {
         String username = uniqueUsername("expiring");
         registerAndLogin("10.2.0.4", username, "password123");
 
-        // Signed with the app's real secret so it's otherwise indistinguishable from a genuine
+        // Signed with the app's real key pair so it's otherwise indistinguishable from a genuine
         // token, but built with a JwtUtil configured for near-instant expiry.
-        JwtUtil quicklyExpiring = new JwtUtil(jwtSecret, 1);
+        JwtUtil quicklyExpiring = new JwtUtil(jwtPrivateKey, jwtPublicKey, 1);
         String expiredToken = quicklyExpiring.generateToken(username);
         Thread.sleep(20);
 

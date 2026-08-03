@@ -6,10 +6,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class JwtUtilTest {
 
-    private static final String SECRET = "unit-test-signing-secret-at-least-32-bytes-long";
+    private static final TestRsaKeys.Pair KEYS = TestRsaKeys.generate();
 
     private JwtUtil newUtil(long expirationMs) {
-        return new JwtUtil(SECRET, expirationMs);
+        return new JwtUtil(KEYS.privateKeyBase64(), KEYS.publicKeyBase64(), expirationMs);
     }
 
     @Test
@@ -52,9 +52,10 @@ class JwtUtilTest {
     }
 
     @Test
-    void rejectsTokenSignedWithADifferentSecret() {
+    void rejectsTokenSignedWithADifferentKeyPair() {
         JwtUtil signer = newUtil(60_000);
-        JwtUtil verifier = new JwtUtil("a-completely-different-signing-secret-32-bytes+", 60_000);
+        TestRsaKeys.Pair otherKeys = TestRsaKeys.generate();
+        JwtUtil verifier = new JwtUtil(otherKeys.privateKeyBase64(), otherKeys.publicKeyBase64(), 60_000);
 
         String token = signer.generateToken("alice");
 

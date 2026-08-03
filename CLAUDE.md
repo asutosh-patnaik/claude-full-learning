@@ -56,8 +56,11 @@ Standard layered Spring Boot structure under `src/main/java/org/example/`:
   `@JsonInclude(NON_NULL)` so a failed login has no `token` key), `UserDetailsResponse` (`GET /users/me` body
   — id + username only, never the password hash), `MessageResponse` (generic message body used by
   `/register`, `/users/me`'s 404, and the rate limiter's 429 response).
-- `util/JwtUtil` — builds/signs JWTs and validates/parses them (HMAC via `jjwt`), using
-  `jwt.secret`/`jwt.expiration-ms` from `application.properties`.
+- `util/JwtUtil` — builds/signs JWTs with an RSA private key (RS256) and verifies them with the matching
+  public key (via `jjwt`), using `jwt.private-key`/`jwt.public-key`/`jwt.expiration-ms` from
+  `application.properties`. Asymmetric rather than HMAC on purpose: only the private key can mint tokens,
+  so the public key can later be handed to other services (or published, OIDC-style) that only need to
+  verify tokens without ever being trusted to forge one.
 - `security/JwtAuthenticationFilter` — reads a `Bearer` token, and if valid, populates
   `SecurityContextHolder` with the username as principal. Doesn't reject requests itself; enforcement is via
   `authorizeHttpRequests` in `SecurityConfig`, so unauthenticated calls to `/login`/`/register` still pass.
@@ -93,8 +96,17 @@ change was needed to add it, that wiring already existed for exactly this case.
 - `spring.data.mongodb.uri` — defaults to `mongodb://localhost:27017/logindb`.
 - `spring.data.mongodb.auto-index-creation` — must stay `true`, or `@Indexed` annotations (the unique index
   on `User.username`) are silently never applied and duplicate usernames slip through.
-- `jwt.secret` — HMAC signing key; the checked-in value is a development-only placeholder and must be
-  overridden (env var or external config) before any real deployment.
+- `jwt.private-key` / `jwt.public-key` — RSA key pair (PKCS8 private / X.509 public, base64 DER, no PEM
+  headers); the checked-in values are development-only and must be overridden (env var or external config,
+  e.g. `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY`) before any real deployment. Regenerate with:
+  ```
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+  openssl pkcs8 -topk8 -nocrypt -in private.pem -outform DER | base64 | tr -d '\n'   # -> jwt.private-key
+  openssl pkey -in private.pem -pubout -outform DER | base64 | tr -d '\n'            # -> jwt.public-key
+  ```
+  Must be `pkcs8 -topk8`, not `pkey -outform DER`, for the private key — on LibreSSL (macOS's default
+  `/usr/bin/openssl`) `pkey -outform DER` emits traditional PKCS1 DER instead of PKCS8, which Java's
+  `PKCS8EncodedKeySpec` rejects with `algid parse error, not a sequence` at Spring context startup.
 - `jwt.expiration-ms` — token lifetime in milliseconds (default 1 hour).
 - `ratelimit.capacity` / `ratelimit.refill-seconds` — requests allowed per client IP per endpoint
   (login/register), refilling every `refill-seconds` (default: 5 per 60s).
@@ -128,6 +140,8 @@ it has no way to know whether tests were actually added for what just changed. T
 
 - Unit tests (`JwtUtilTest`, `AuthServiceTest`, `UserServiceTest`, `RateLimitFilterTest`,
   `JwtAuthenticationFilterTest`) use Mockito/plain instantiation — no Spring context, no external services.
+  Tests needing a `JwtUtil` generate a fresh, throwaway RSA key pair via `TestRsaKeys.generate()` rather
+  than hardcoding key material.
 - `AuthControllerIntegrationTest` and `UserControllerIntegrationTest` boot the full app (`@SpringBootTest` +
   `MockMvc`) against a real MongoDB via Testcontainers (`@Container` + `@ServiceConnection` — needs Docker
   running locally, no manual Mongo setup required) and drive it through HTTP. Between them: registration,
@@ -138,9 +152,9 @@ it has no way to know whether tests were actually added for what just changed. T
   `remoteAddr`) via `.with(fromIp(...))`. `RateLimitFilter`'s buckets are keyed by IP+path and live in a
   singleton bean shared across the whole test class, so without this, unrelated tests hitting `/login` from
   the same default MockMvc IP would silently drain each other's rate-limit allowance. `UserControllerIntegrationTest`'s
-  expired-token test mints its own token with a throwaway `JwtUtil` built from the app's real `jwt.secret`
-  (`@Value`-injected) and a 1ms expiry, rather than overriding `jwt.expiration-ms` for the whole class — that
-  would make even the "valid token" tests race against expiry.
+  expired-token test mints its own token with a throwaway `JwtUtil` built from the app's real
+  `jwt.private-key`/`jwt.public-key` (`@Value`-injected) and a 1ms expiry, rather than overriding
+  `jwt.expiration-ms` for the whole class — that would make even the "valid token" tests race against expiry.
 
 ## Testing the API manually
 
