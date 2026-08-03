@@ -1,0 +1,21 @@
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # Only override needed for Docker: "mongo" is the compose service name, not localhost.
+      # Everything else (JWT keys, rate limits) uses the same dev defaults as ./mvnw spring-boot:run.
+      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/logindb
+    depends_on:
+      - mongo
+
+volumes:
+  mongo-data:

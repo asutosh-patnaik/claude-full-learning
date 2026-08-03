@@ -40,23 +40,42 @@ server-side session revocation, RSA key rotation, and per-IP rate limiting — M
 
 - Java 17+
 - Docker (for running MongoDB locally, and required by the integration test suite via Testcontainers)
+- Optional, for containerized/Kubernetes usage below: Docker Compose, minikube, kubectl
 
 ## Getting started
 
-```bash
-# 1. Start MongoDB
-docker run -d --name login-mongo -p 27017:27017 mongo:7
+There are three interchangeable ways to run this locally — the app's behavior is identical either way, they
+just differ in how MongoDB and the JVM get started. Pick whichever fits what you're doing.
 
-# 2. Run the app (starts on :8080)
+### Option 1: `spring-boot:run` (fastest edit-compile-run loop)
+
+```bash
+docker run -d --name login-mongo -p 27017:27017 mongo:7
 ./mvnw spring-boot:run
 ```
 
-Or build and run the jar directly:
+### Option 2: build and run the jar directly
 
 ```bash
+docker run -d --name login-mongo -p 27017:27017 mongo:7
 ./mvnw -DskipTests package
 java -jar target/claude-full-learning-1.0-SNAPSHOT.jar
 ```
+
+### Option 3: Docker Compose (app + MongoDB, both containerized)
+
+```bash
+docker compose up --build
+```
+
+Builds the image from the `Dockerfile` (multi-stage: Maven/JDK to compile, a bare JRE to run — the final
+image carries no build tooling or source) and starts it alongside a `mongo:7` container on the same Docker
+network. The only config override needed versus the other two options is `SPRING_DATA_MONGODB_URI` pointing
+at the `mongo` service name instead of `localhost` — everything else (JWT keys, rate limits) uses the same
+checked-in dev defaults. Data persists in a named volume across `docker compose down` (not `down -v`).
+
+All three expose the API on `:8080` and behave identically — the endpoints below don't care which one you
+used.
 
 ## API reference
 
@@ -197,6 +216,63 @@ rejects at startup with `algid parse error, not a sequence`.
 In production, both keys (and the MongoDB URI) should come from environment variables backed by a secrets
 manager, not from a checked-in properties file.
 
+## Deploying to Kubernetes (minikube)
+
+Manifests live in `k8s/`: `mongo.yaml` (Deployment + Service, no auth, no PersistentVolumeClaim — ephemeral,
+matching the local-dev posture; a real deployment needs both), `secret.yaml` (the same dev JWT key pair from
+`application.properties`, injected as a Kubernetes `Secret` rather than a `ConfigMap`), and `app.yaml`
+(Deployment + a `NodePort` Service). The app's readiness/liveness probes are plain TCP-socket checks — there's
+no `/actuator/health` (no Spring Boot Actuator dependency), and every real route requires either `POST` or a
+valid JWT, so an HTTP `GET` probe would misreport the app as unhealthy.
+
+```bash
+# 1. Build the image and load it into minikube's local image cache (no registry involved —
+#    the Deployment's imagePullPolicy: Never expects the image to already be there)
+docker build -t claude-full-learning:latest .
+minikube start   # if not already running
+minikube image load claude-full-learning:latest
+
+# 2. Deploy
+kubectl apply -f k8s/mongo.yaml
+kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/app.yaml
+
+# 3. Watch it come up
+kubectl get pods -w
+
+# 4. Reach it (keep this running in its own terminal — on macOS with the Docker driver,
+#    minikube's tunnel needs the process to stay alive)
+minikube service claude-full-learning --url
+```
+
+Hit the URL that prints with the same requests as the [API reference](#api-reference) above. Tear down with:
+
+```bash
+kubectl delete -f k8s/app.yaml -f k8s/secret.yaml -f k8s/mongo.yaml
+```
+
+This was deployed and verified end-to-end (register → login → `/users/me`, including confirming the RSA
+`kid` header and rate-limit `429` both work identically inside the cluster) before being checked in.
+
+## Testing with Postman
+
+`postman/claude-full-learning.postman_collection.json` covers every scenario in the API reference above,
+plus a few that aren't (session revocation end-to-end: change password, confirm the old token is dead,
+confirm a fresh login works; rate-limit exhaustion). Import it into Postman, or run it headless with
+[Newman](https://github.com/postmanlabs/newman):
+
+```bash
+npx newman run postman/claude-full-learning.postman_collection.json
+# against something other than localhost:8080, e.g. the minikube deployment above:
+npx newman run postman/claude-full-learning.postman_collection.json --env-var baseUrl=http://<host>:<port>
+```
+
+Requests run in a specific order within the collection (Register → Login → Users) because later ones depend
+on state from earlier ones — a pre-request script generates one random username per run and a test script
+captures the login token into a collection variable, both reused by subsequent requests. Run the whole
+collection top to bottom, not individual requests in isolation, except where a request is explicitly
+self-contained (the validation/auth-failure cases).
+
 ## Testing
 
 ```bash
@@ -239,6 +315,11 @@ src/main/java/org/example/
 ├── security/       Servlet filters (JwtAuthenticationFilter, RateLimitFilter)
 ├── config/         Spring configuration (SecurityConfig, AppConfig)
 └── util/           JwtUtil, JwtProperties
+
+Dockerfile               Multi-stage build (JDK to compile, JRE to run)
+docker-compose.yml        App + MongoDB, for local containerized dev
+k8s/                      Kubernetes manifests (mongo, app-secrets, app) for minikube
+postman/                  Postman collection covering the full API + edge cases
 ```
 
 Full breakdown of each class's responsibilities: [CLAUDE.md's Architecture section](CLAUDE.md#architecture).

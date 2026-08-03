@@ -1,0 +1,432 @@
+{
+  "info": {
+    "name": "claude-full-learning",
+    "description": "Register/login/JWT auth API. Covers every scenario exercised manually during development: happy paths, validation/auth failures, session revocation, and rate limiting. See CLAUDE.md and README.md in the repo for the full design rationale.\n\nRun order matters within a folder (Register → Login → Users → Password change) since later requests reuse state (e.g. the token captured by Login). Each request has test assertions on status code and, where relevant, response shape.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Generated once per collection run, then reused by every request via {{username}}.",
+          "// Deliberately NOT a {{$randomInt}} default on the variable itself — Postman re-resolves",
+          "// dynamic variables on every reference, so a stored default of 'alice-{{$randomInt}}'",
+          "// would silently produce a DIFFERENT username each time {{username}} is used, breaking",
+          "// every test that depends on registering and later logging in as the same user.",
+          "if (!pm.collectionVariables.get('username')) {",
+          "  pm.collectionVariables.set('username', 'alice-' + Date.now());",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "username", "value": "" },
+    { "key": "password", "value": "password123" },
+    { "key": "newPassword", "value": "newpassword456" },
+    { "key": "token", "value": "" },
+    { "key": "tokenBeforePasswordChange", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Register",
+      "item": [
+        {
+          "name": "Register - success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('body has success message', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('User registered successfully');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/register", "host": ["{{baseUrl}}"], "path": ["register"] }
+          }
+        },
+        {
+          "name": "Register - duplicate username (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('body explains the conflict', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Username already exists');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/register", "host": ["{{baseUrl}}"], "path": ["register"] }
+          }
+        },
+        {
+          "name": "Register - password too short (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"shortpw-{{$randomInt}}\",\n  \"password\": \"short\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/register", "host": ["{{baseUrl}}"], "path": ["register"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login",
+      "item": [
+        {
+          "name": "Login - success (captures token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('response includes a token', () => pm.expect(body.token).to.be.a('string'));",
+                  "pm.collectionVariables.set('token', body.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/login", "host": ["{{baseUrl}}"], "path": ["login"] }
+          }
+        },
+        {
+          "name": "Login - wrong password (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('generic message, no user enumeration', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Invalid username or password');",
+                  "});",
+                  "pm.test('no token leaked on failure', () => {",
+                  "  pm.expect(pm.response.json().token).to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"totally-wrong\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/login", "host": ["{{baseUrl}}"], "path": ["login"] }
+          }
+        },
+        {
+          "name": "Login - unknown user (401, same generic message)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('identical message to wrong-password case', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Invalid username or password');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"ghost-{{$randomInt}}\",\n  \"password\": \"whatever123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/login", "host": ["{{baseUrl}}"], "path": ["login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get current user - valid token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns only id and username, no password', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.keys('id', 'username');",
+                  "  pm.expect(body.username).to.eql(pm.collectionVariables.get('username'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+          }
+        },
+        {
+          "name": "Get current user - missing token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('body explains why', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Authentication required');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+          }
+        },
+        {
+          "name": "Get current user - malformed token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer not-a-real-token" }],
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+          }
+        },
+        {
+          "name": "Change password - wrong current password (401, session untouched)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('body explains why', () => {",
+                  "  pm.expect(pm.response.json().message).to.eql('Current password is incorrect');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"totally-wrong\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "password"]
+            }
+          }
+        },
+        {
+          "name": "Change password - success (kills the current token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenBeforePasswordChange', pm.collectionVariables.get('token'));",
+                  "pm.collectionVariables.set('password', pm.collectionVariables.get('newPassword'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "password"]
+            }
+          }
+        },
+        {
+          "name": "Get current user - old token now rejected (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401 — token revoked by the password change above', () => {",
+                  "  pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenBeforePasswordChange}}" }],
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+          }
+        },
+        {
+          "name": "Login again with new password (gets a fresh working token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('token', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/login", "host": ["{{baseUrl}}"], "path": ["login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rate limiting",
+      "item": [
+        {
+          "name": "Login repeatedly - 6th request in the window gets 429",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Use Postman's Collection Runner (or Runner button) with 6+ iterations against",
+                  "// THIS single request to trigger it — a single send just counts toward the bucket.",
+                  "// Default: 5 requests per 60s per client IP per endpoint (see ratelimit.capacity /",
+                  "// ratelimit.refill-seconds in application.properties). The 6th within the window",
+                  "// should return 429.",
+                  "const status = pm.response.code;",
+                  "pm.test('either succeeds/fails auth normally, or is rate-limited', () => {",
+                  "  pm.expect([200, 401, 429]).to.include(status);",
+                  "});",
+                  "if (status === 429) {",
+                  "  pm.test('429 body explains the limit', () => {",
+                  "    pm.expect(pm.response.json().message).to.eql('Too many requests, please try again later');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{newPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/login", "host": ["{{baseUrl}}"], "path": ["login"] }
+          }
+        }
+      ]
+    }
+  ]
+}
