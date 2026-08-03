@@ -2,6 +2,7 @@ package org.example.security;
 
 import org.example.service.AuthService;
 import org.example.util.JwtUtil;
+import org.example.util.TestJwtProperties;
 import org.example.util.TestRsaKeys;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,7 @@ class JwtAuthenticationFilterTest {
 
     private static final TestRsaKeys.Pair KEYS = TestRsaKeys.generate();
 
-    private final JwtUtil jwtUtil = new JwtUtil(KEYS.privateKeyBase64(), KEYS.publicKeyBase64(), 60_000);
+    private final JwtUtil jwtUtil = new JwtUtil(TestJwtProperties.singleKey("test-key", KEYS, 60_000));
 
     @Mock
     private AuthService authService;
@@ -94,7 +95,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void leavesContextEmptyForExpiredToken() throws Exception {
-        JwtUtil shortLived = new JwtUtil(KEYS.privateKeyBase64(), KEYS.publicKeyBase64(), 1);
+        JwtUtil shortLived = new JwtUtil(TestJwtProperties.singleKey("test-key", KEYS, 1));
         String token = shortLived.generateToken("alice");
         Thread.sleep(20);
         MockHttpServletRequest request = new MockHttpServletRequest();

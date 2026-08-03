@@ -2,10 +2,10 @@ package org.example.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.service.AuthService;
+import org.example.util.JwtProperties;
 import org.example.util.JwtUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -50,11 +50,8 @@ class UserControllerIntegrationTest {
     @Autowired
     private AuthService authService;
 
-    @Value("${jwt.private-key}")
-    private String jwtPrivateKey;
-
-    @Value("${jwt.public-key}")
-    private String jwtPublicKey;
+    @Autowired
+    private JwtProperties jwtProperties;
 
     @Test
     void validTokenReturnsTheCallersOwnDetails() throws Exception {
@@ -87,9 +84,13 @@ class UserControllerIntegrationTest {
         String username = uniqueUsername("expiring");
         registerAndLogin("10.2.0.4", username, "password123");
 
-        // Signed with the app's real key pair so it's otherwise indistinguishable from a genuine
+        // Signed with the app's real key(s) so it's otherwise indistinguishable from a genuine
         // token, but built with a JwtUtil configured for near-instant expiry.
-        JwtUtil quicklyExpiring = new JwtUtil(jwtPrivateKey, jwtPublicKey, 1);
+        JwtProperties quicklyExpiringProperties = new JwtProperties();
+        quicklyExpiringProperties.setActiveKeyId(jwtProperties.getActiveKeyId());
+        quicklyExpiringProperties.setKeys(jwtProperties.getKeys());
+        quicklyExpiringProperties.setExpirationMs(1);
+        JwtUtil quicklyExpiring = new JwtUtil(quicklyExpiringProperties);
         String expiredToken = quicklyExpiring.generateToken(username);
         Thread.sleep(20);
 
