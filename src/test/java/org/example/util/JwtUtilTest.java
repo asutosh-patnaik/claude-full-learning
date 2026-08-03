@@ -52,6 +52,25 @@ class JwtUtilTest {
     }
 
     @Test
+    void extractIssuedAtHasMillisecondPrecisionNotJustSeconds() {
+        // Regression test: the standard `iat` claim is second-precision, which is too coarse to
+        // reliably order a token against a session-invalidation Instant.now() when both land in
+        // the same wall-clock second (flooring to the second could put issuedAt *before* an
+        // invalidation instant it should be after). A second-truncated implementation would floor
+        // down to the start of the current second — almost always earlier than beforeMillis — so
+        // bracketing tightly between before/after millis catches that regression without any
+        // sleep-based flakiness.
+        JwtUtil jwtUtil = newUtil(60_000);
+        long beforeMillis = System.currentTimeMillis();
+
+        String token = jwtUtil.generateToken("alice");
+
+        long afterMillis = System.currentTimeMillis();
+        long issuedAtMillis = jwtUtil.extractIssuedAt(token).toEpochMilli();
+        assertThat(issuedAtMillis).isBetween(beforeMillis, afterMillis);
+    }
+
+    @Test
     void rejectsTokenSignedWithADifferentKeyPair() {
         JwtUtil signer = newUtil(60_000);
         TestRsaKeys.Pair otherKeys = TestRsaKeys.generate();

@@ -7,8 +7,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Date;
 
 @Service
 public class AuthService {
@@ -45,17 +43,18 @@ public class AuthService {
     }
 
     /**
-     * Whether a token for {@code username}, issued at {@code tokenIssuedAt}, still represents a
-     * live session — false if the user is blocked, no longer exists, or the token predates the
-     * user's {@code tokenValidAfter} marker (set by {@link #changePassword} / {@link #blockUser}).
+     * Whether a token for {@code username}, issued at {@code tokenIssuedAt} (millisecond
+     * precision — see {@link org.example.util.JwtUtil#extractIssuedAt}), still represents a live
+     * session — false if the user is blocked, no longer exists, or the token predates the user's
+     * {@code tokenValidAfter} marker (set by {@link #changePassword} / {@link #blockUser}).
      * Called by JwtAuthenticationFilter on every request, which is the necessary trade-off for
      * supporting revocation at all: a purely stateless JWT can never be un-issued.
      */
-    public boolean isSessionValid(String username, Date tokenIssuedAt) {
+    public boolean isSessionValid(String username, Instant tokenIssuedAt) {
         return userRepository.findByUsername(username)
                 .filter(user -> !user.isBlocked())
                 .filter(user -> user.getTokenValidAfter() == null
-                        || !tokenIssuedAt.toInstant().isBefore(user.getTokenValidAfter()))
+                        || !tokenIssuedAt.isBefore(user.getTokenValidAfter()))
                 .isPresent();
     }
 
@@ -69,7 +68,7 @@ public class AuthService {
                 .filter(user -> passwordEncoder.matches(currentPassword, user.getPassword()))
                 .map(user -> {
                     user.setPassword(passwordEncoder.encode(newPassword));
-                    user.setTokenValidAfter(invalidationTimestamp());
+                    user.setTokenValidAfter(Instant.now());
                     userRepository.save(user);
                     return true;
                 })
@@ -85,23 +84,10 @@ public class AuthService {
         return userRepository.findByUsername(username)
                 .map(user -> {
                     user.setBlocked(true);
-                    user.setTokenValidAfter(invalidationTimestamp());
+                    user.setTokenValidAfter(Instant.now());
                     userRepository.save(user);
                     return true;
                 })
                 .orElse(false);
-    }
-
-    /**
-     * JWT {@code iat} claims are second-precision (JWT numeric dates are whole seconds), but
-     * {@code Instant.now()} isn't — a token minted in the same wall-clock second as an
-     * invalidation could otherwise get an {@code iat} that floors to just before this instant's
-     * milliseconds, and be spuriously rejected as "issued before" a change that, causally, it
-     * came after. Truncating to seconds matches JWT's own granularity and removes that gap,
-     * at the cost of a much narrower race where a token issued earlier in the *same* second as
-     * the invalidation could still validate — an acceptable trade for a non-realtime control.
-     */
-    private static Instant invalidationTimestamp() {
-        return Instant.now().truncatedTo(ChronoUnit.SECONDS);
     }
 }

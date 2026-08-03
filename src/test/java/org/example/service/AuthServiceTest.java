@@ -13,7 +13,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Date;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,7 +106,7 @@ class AuthServiceTest {
         user.setUsername("alice");
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
 
-        assertThat(authService.isSessionValid("alice", new Date())).isTrue();
+        assertThat(authService.isSessionValid("alice", Instant.now())).isTrue();
     }
 
     @Test
@@ -117,7 +116,7 @@ class AuthServiceTest {
         user.setTokenValidAfter(Instant.now().minus(1, ChronoUnit.HOURS));
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
 
-        assertThat(authService.isSessionValid("alice", new Date())).isTrue();
+        assertThat(authService.isSessionValid("alice", Instant.now())).isTrue();
     }
 
     @Test
@@ -125,7 +124,7 @@ class AuthServiceTest {
         User user = new User();
         user.setUsername("alice");
         user.setTokenValidAfter(Instant.now());
-        Date tokenIssuedBeforeInvalidation = Date.from(Instant.now().minus(1, ChronoUnit.HOURS));
+        Instant tokenIssuedBeforeInvalidation = Instant.now().minus(1, ChronoUnit.HOURS);
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
 
         assertThat(authService.isSessionValid("alice", tokenIssuedBeforeInvalidation)).isFalse();
@@ -138,14 +137,29 @@ class AuthServiceTest {
         user.setBlocked(true);
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
 
-        assertThat(authService.isSessionValid("alice", new Date())).isFalse();
+        assertThat(authService.isSessionValid("alice", Instant.now())).isFalse();
     }
 
     @Test
     void sessionIsInvalidWhenUserNoLongerExists() {
         when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
 
-        assertThat(authService.isSessionValid("ghost", new Date())).isFalse();
+        assertThat(authService.isSessionValid("ghost", Instant.now())).isFalse();
+    }
+
+    @Test
+    void sessionValidityIsCorrectEvenWhenTokenAndInvalidationLandInTheSameWallClockSecond() {
+        // Regression test for the truncation bug: comparing at second granularity could make a
+        // token issued a few milliseconds before the invalidation marker look like it came after,
+        // or vice versa, whenever both timestamps fall in the same second.
+        User user = new User();
+        user.setUsername("alice");
+        Instant invalidatedAt = Instant.now();
+        user.setTokenValidAfter(invalidatedAt);
+        Instant tokenIssuedOneMillisecondEarlier = invalidatedAt.minusMillis(1);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+
+        assertThat(authService.isSessionValid("alice", tokenIssuedOneMillisecondEarlier)).isFalse();
     }
 
     @Test
