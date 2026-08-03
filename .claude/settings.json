@@ -5,9 +5,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/asutoshpatnaik/codebase/claude-full-learning/.claude/hooks/run-tests-on-stop.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-tests-on-stop.sh\"",
             "timeout": 300,
-            "statusMessage": "Running ./mvnw test..."
+            "statusMessage": "Running ./mvnw verify..."
           }
         ]
       }
