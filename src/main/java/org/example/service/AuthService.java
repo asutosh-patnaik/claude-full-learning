@@ -6,6 +6,10 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Date;
+
 @Service
 public class AuthService {
 
@@ -19,6 +23,7 @@ public class AuthService {
 
     public boolean authenticate(String username, String rawPassword) {
         return userRepository.findByUsername(username)
+                .filter(user -> !user.isBlocked())
                 .map(user -> passwordEncoder.matches(rawPassword, user.getPassword()))
                 .orElse(false);
     }
@@ -37,5 +42,66 @@ public class AuthService {
         } catch (DuplicateKeyException e) {
             return false;
         }
+    }
+
+    /**
+     * Whether a token for {@code username}, issued at {@code tokenIssuedAt}, still represents a
+     * live session — false if the user is blocked, no longer exists, or the token predates the
+     * user's {@code tokenValidAfter} marker (set by {@link #changePassword} / {@link #blockUser}).
+     * Called by JwtAuthenticationFilter on every request, which is the necessary trade-off for
+     * supporting revocation at all: a purely stateless JWT can never be un-issued.
+     */
+    public boolean isSessionValid(String username, Date tokenIssuedAt) {
+        return userRepository.findByUsername(username)
+                .filter(user -> !user.isBlocked())
+                .filter(user -> user.getTokenValidAfter() == null
+                        || !tokenIssuedAt.toInstant().isBefore(user.getTokenValidAfter()))
+                .isPresent();
+    }
+
+    /**
+     * Verifies the current password, then sets the new one and bumps {@code tokenValidAfter} to
+     * now — every token issued before this call, on any machine, fails {@link #isSessionValid}
+     * on its next request.
+     */
+    public boolean changePassword(String username, String currentPassword, String newPassword) {
+        return userRepository.findByUsername(username)
+                .filter(user -> passwordEncoder.matches(currentPassword, user.getPassword()))
+                .map(user -> {
+                    user.setPassword(passwordEncoder.encode(newPassword));
+                    user.setTokenValidAfter(invalidationTimestamp());
+                    userRepository.save(user);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    /**
+     * Marks the user blocked and bumps {@code tokenValidAfter}, so existing sessions are killed
+     * immediately rather than merely being unable to obtain new ones. There is no HTTP endpoint
+     * for this yet — it's a plain service method, callable once an admin capability exists.
+     */
+    public boolean blockUser(String username) {
+        return userRepository.findByUsername(username)
+                .map(user -> {
+                    user.setBlocked(true);
+                    user.setTokenValidAfter(invalidationTimestamp());
+                    userRepository.save(user);
+                    return true;
+                })
+                .orElse(false);
+    }
+
+    /**
+     * JWT {@code iat} claims are second-precision (JWT numeric dates are whole seconds), but
+     * {@code Instant.now()} isn't — a token minted in the same wall-clock second as an
+     * invalidation could otherwise get an {@code iat} that floors to just before this instant's
+     * milliseconds, and be spuriously rejected as "issued before" a change that, causally, it
+     * came after. Truncating to seconds matches JWT's own granularity and removes that gap,
+     * at the cost of a much narrower race where a token issued earlier in the *same* second as
+     * the invalidation could still validate — an acceptable trade for a non-realtime control.
+     */
+    private static Instant invalidationTimestamp() {
+        return Instant.now().truncatedTo(ChronoUnit.SECONDS);
     }
 }
