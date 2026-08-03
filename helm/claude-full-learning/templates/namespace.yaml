@@ -1,0 +1,10 @@
+{{- if .Values.namespace.create }}
+# Helm installs resources in a fixed order by Kind (Namespace first), so this is created before
+# anything namespaced below needs it to exist - no separate `--create-namespace` flag required.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "claude-full-learning.namespace" . }}
+  labels:
+    {{- include "claude-full-learning.labels" . | nindent 4 }}
+{{- end }}

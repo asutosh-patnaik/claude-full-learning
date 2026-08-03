@@ -1,0 +1,29 @@
+# Production overlay: the one environment that turns autoscaling on, with resource limits bumped
+# to reflect a "this matters more" posture and quieter logging. Still a local-minikube demo of the
+# mechanics, not an actual production deployment - see k8s/mongo.yaml's and this chart's own
+# mongo-deployment.yaml comments for what's deliberately still out of scope (Mongo auth/PVC).
+namespace:
+  name: claude-full-learning-production
+
+replicaCount: 2
+
+ingress:
+  enabled: true
+  host: claude-full-learning.local
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+config:
+  logLevel: WARN

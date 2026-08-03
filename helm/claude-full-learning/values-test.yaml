@@ -1,0 +1,16 @@
+# Test overlay: 2 replicas so the Service's label selector actually load-balances across pods
+# (something dev's replicaCount: 1 can't demonstrate at all).
+namespace:
+  name: claude-full-learning-test
+
+replicaCount: 2
+
+ingress:
+  enabled: true
+  host: claude-full-learning.test.local
+
+config:
+  logLevel: INFO
+
+autoscaling:
+  enabled: false

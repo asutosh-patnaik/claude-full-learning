@@ -1,0 +1,12 @@
+apiVersion: v2
+name: claude-full-learning
+description: >
+  Helm chart for the claude-full-learning JWT auth API. Parallel to the plain k8s/ manifests
+  (which are kept as-is, untouched) - this is the recommended path for anything beyond the
+  original minimal demo: per-environment values, Ingress, HPA, and observability hooks that the
+  plain manifests deliberately don't have.
+type: application
+version: 0.1.0
+# appVersion is a default/documentation value only - deploy.sh always overrides the actual
+# deployed tag via --set image.tag=<immutable sha or semver tag from GHCR>, never this field.
+appVersion: "1.0-SNAPSHOT"

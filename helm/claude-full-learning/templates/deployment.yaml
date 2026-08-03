@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "claude-full-learning.fullname" . }}
+  namespace: {{ include "claude-full-learning.namespace" . }}
+  labels:
+    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "claude-full-learning.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels:
+        {{- include "claude-full-learning.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+    spec:
+      serviceAccountName: {{ include "claude-full-learning.serviceAccountName" . }}
+      {{- if .Values.image.pullSecretName }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecretName }}
+      {{- end }}
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: {{ include "claude-full-learning.fullname" . }}-config
+          env:
+            - name: JWT_ACTIVE_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  key: jwt-active-key-id
+            - name: JWT_KEYS_0_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  key: jwt-key-id
+            - name: JWT_KEYS_0_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  key: jwt-private-key
+            - name: JWT_KEYS_0_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  key: jwt-public-key
+            - name: JWT_EXPIRATION_MS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  key: jwt-expiration-ms
+          # Real HTTP health semantics via Actuator's k8s probe groups, replacing k8s/app.yaml's
+          # TCP-socket-only probes (which could only tell "is the port open", not "is the app
+          # actually able to serve/accept traffic").
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

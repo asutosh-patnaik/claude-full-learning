@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "claude-full-learning.fullname" . }}
+  namespace: {{ include "claude-full-learning.namespace" . }}
+  labels:
+    {{- include "claude-full-learning.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "claude-full-learning.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+  ports:
+    # Named (not just numeric) because the ServiceMonitor (observability, off by default) scrapes
+    # by port name, not number.
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

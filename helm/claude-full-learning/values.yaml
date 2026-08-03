@@ -1,0 +1,84 @@
+# Default values for claude-full-learning. See values-dev.yaml / values-test.yaml /
+# values-production.yaml for the (small, deliberate) per-environment overlays, and
+# values-secrets.yaml.example for the untracked secrets overlay every install also needs.
+
+namespace:
+  create: true
+  name: claude-full-learning
+
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/asutosh-patnaik/claude-full-learning
+  tag: latest
+  # IfNotPresent works for both the GHCR-pull path (deploy.sh --source ghcr) and the local
+  # build+`minikube image load` path (deploy.sh --source local, mirroring k8s/app.yaml's flow) -
+  # set to Never only if you want to guarantee no accidental registry pull ever happens.
+  pullPolicy: IfNotPresent
+  # Name of a `kubernetes.io/dockerconfigjson` Secret, only needed if the GHCR package is private.
+  # See docs/deployment.md for the `kubectl create secret docker-registry` command.
+  pullSecretName: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: nginx
+  host: claude-full-learning.local
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+mongodb:
+  enabled: true
+  image: mongo:7
+
+config:
+  # Leave empty to use the in-chart Mongo (see _helpers.tpl's mongoUri) when mongodb.enabled;
+  # set explicitly to point at an external Mongo instead (requires mongodb.enabled: false).
+  mongoUri: ""
+  logLevel: INFO
+  rateLimitCapacity: 5
+  rateLimitRefillSeconds: 60
+
+# Real values come from an untracked -f values-<env>.secrets.yaml overlay - see
+# values-secrets.yaml.example and docs/deployment.md. Left empty here on purpose: templates/secret.yaml
+# fails the install loudly if jwtPrivateKey is still empty at render time, rather than silently
+# deploying a broken app.
+secrets:
+  jwtActiveKeyId: ""
+  jwtKeyId: ""
+  jwtPrivateKey: ""
+  jwtPublicKey: ""
+  jwtExpirationMs: "3600000"
+
+# Both off by default; turned on via a values override once the observability stack
+# (scripts/observability.sh) is actually installed - see docs/setup.md and docs/troubleshooting.md.
+serviceMonitor:
+  enabled: false
+  # Must match the Helm release name kube-prometheus-stack was installed as, e.g.
+  # `helm install monitoring prometheus-community/kube-prometheus-stack` -> "monitoring".
+  prometheusRelease: monitoring
+
+grafanaDashboard:
+  enabled: false
