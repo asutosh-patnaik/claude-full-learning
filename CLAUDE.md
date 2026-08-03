@@ -277,6 +277,13 @@ floating branch-name tag rides alongside for local convenience only and is never
 The image is built but never pushed (`push: false`) — no registry, no ECR, no Kubernetes apply — because
 this workflow is CI, not CD; that boundary is intentional, not an oversight to fix later in this same file.
 
+`docker-build` sets `DOCKER_BUILD_RECORD_UPLOAD: false` on the build step — `docker/build-push-action`
+otherwise auto-uploads a `*.dockerbuild` build-record artifact (for Docker Desktop import) that isn't
+consumed anywhere here, and its format made `publish-artifacts`'s blanket `actions/download-artifact` fail
+outright rather than just skip it (observed in a real CI run before this was added — not a hypothetical).
+We already write our own `docker-image-metadata.json` from `docker image inspect`, so the fix is to stop the
+record from being generated at all rather than filter around it after the fact.
+
 Branch protection requiring these checks on `master` is a **repository setting**, not something a workflow
 YAML can express — see README's Continuous integration section for the exact steps (it also isn't retroactive:
 each job name only appears in the branch-protection picklist after it has completed at least once).

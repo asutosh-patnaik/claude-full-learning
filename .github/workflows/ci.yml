@@ -207,6 +207,14 @@ jobs:
 
       - name: Build image (not pushed)
         uses: docker/build-push-action@v6
+        env:
+          # The action auto-uploads a `*.dockerbuild` build-record artifact for
+          # Docker Desktop import. We don't consume it, and the publish-artifacts
+          # job downloads every artifact in the run - the build-record's format
+          # made it fail actions/download-artifact there (see run 30835363318).
+          # We already write our own docker-image-metadata.json below, so just
+          # stop the record from being generated in the first place.
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           push: false
