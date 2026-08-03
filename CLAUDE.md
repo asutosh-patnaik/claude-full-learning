@@ -27,8 +27,14 @@ java -jar target/claude-full-learning-1.0-SNAPSHOT.jar
 # Run all tests (unit + integration; integration tests need Docker running, for Testcontainers)
 ./mvnw test
 
+# Run tests AND the code-coverage gate (what the Stop hook actually runs — see "Code coverage" below)
+./mvnw verify
+
 # Run a single test class
 ./mvnw -Dtest=ClassName test
+
+# View the coverage report after any of the above
+open target/site/jacoco/index.html
 ```
 
 ## Architecture
@@ -196,9 +202,29 @@ Match existing conventions rather than introducing new ones: Mockito + plain ins
 Any new integration test touching `/login` or `/register` (or a future rate-limited endpoint) needs its own
 fake client IP via `.with(fromIp(...))` — see the note in `## Tests` below on why.
 
-This is a judgment call a hook can't make. The Stop hook (`.claude/hooks/run-tests-on-stop.sh`) runs the
-suite after every turn and blocks on failures, but it only verifies that whatever tests exist still pass —
-it has no way to know whether tests were actually added for what just changed. This section is that check.
+Whether the *right* tests were added for what changed is a judgment call a hook can't make — the Stop hook
+(`.claude/hooks/run-tests-on-stop.sh`) runs `./mvnw verify` (tests + the coverage gate below) after every
+turn and blocks on failures, but "coverage didn't regress" is not the same claim as "this was tested
+meaningfully." This section is the check for the latter; the coverage gate is a mechanical backstop for the
+former — evidence a change was covered *at all*, not evidence it was covered *well*.
+
+## Code coverage
+
+`./mvnw verify` runs a JaCoCo coverage gate (`jacoco-maven-plugin`, bound to the `verify` phase) that fails
+the build if project-wide line coverage drops below 80% or branch coverage below 70%, excluding `Main`
+(the `SpringApplication.run()` bootstrap — not meaningfully unit-testable, and excluded the same way in
+effectively every Spring Boot project). Both thresholds sit comfortably below this project's actual
+baseline (96.5% line / 87.5% branch as of the JWT-rotation work) specifically so the gate catches a real
+drop in coverage — a large new untested class, a controller added without tests — without being a
+hair-trigger that fails the build over one defensive catch block someone reasonably chose not to test.
+
+`plain ./mvnw test` does **not** run this gate — only `./mvnw verify` does (and that's what the Stop hook
+runs). View the HTML report at `target/site/jacoco/index.html` after either command; both generate it via
+the `report` execution.
+
+If a legitimate change needs the threshold moved, change it deliberately in `pom.xml`
+(`jacoco-maven-plugin` → `check` execution → `limits`) with a reason — don't lower it silently just to make
+a failing build pass.
 
 ## Tests
 
