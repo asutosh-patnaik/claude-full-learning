@@ -203,8 +203,14 @@ manager, not from a checked-in properties file.
 # Run everything (unit + integration; integration tests need Docker running)
 ./mvnw test
 
+# Run tests AND the code-coverage gate (fails the build if coverage regresses)
+./mvnw verify
+
 # Run a single test class
 ./mvnw -Dtest=ClassName test
+
+# View the coverage report after either mvnw command above
+open target/site/jacoco/index.html
 ```
 
 - **Unit tests** (`JwtUtilTest`, `AuthServiceTest`, `UserServiceTest`, `RateLimitFilterTest`,
@@ -214,9 +220,12 @@ manager, not from a checked-in properties file.
   Spring application and drive it over real HTTP (MockMvc) against a real MongoDB instance, provisioned
   automatically per test run via [Testcontainers](https://testcontainers.com/) — no manual database setup
   needed, just a running Docker daemon.
+- **Code coverage** is enforced via JaCoCo (`./mvnw verify`, not plain `./mvnw test`): the build fails if
+  project-wide line coverage drops below 80% or branch coverage below 70% (current baseline: 96.5% / 87.5%).
 
 See [CLAUDE.md's Testing policy](CLAUDE.md#testing-policy) for the project's rule on when a change requires
-a unit test versus an integration test.
+a unit test versus an integration test, and [CLAUDE.md's Code coverage section](CLAUDE.md#code-coverage) for
+the reasoning behind the specific thresholds.
 
 ## Project structure
 
@@ -246,9 +255,9 @@ Pull requests in this repository are automatically reviewed by Claude via GitHub
 - Every change to functionality should ship with tests in the same change — see
   [CLAUDE.md's Testing policy](CLAUDE.md#testing-policy) for exactly what's expected (unit vs. integration,
   when each is required).
-- A local Git hook (`.claude/hooks/run-tests-on-stop.sh`) runs the full test suite automatically at the end
-  of a Claude Code turn in this repo and surfaces failures back to Claude — see
-  [CLAUDE.md](CLAUDE.md#tests) for details.
+- A local Git hook (`.claude/hooks/run-tests-on-stop.sh`) runs `./mvnw verify` — the full test suite plus the
+  code-coverage gate — automatically at the end of a Claude Code turn in this repo, and surfaces any test
+  failure or coverage regression back to Claude — see [CLAUDE.md](CLAUDE.md#tests) for details.
 
 ## License
 
