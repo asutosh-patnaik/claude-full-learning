@@ -69,6 +69,20 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void alsoLimitsThePasswordChangeEndpoint() throws Exception {
+        for (int i = 0; i < 3; i++) {
+            filter.doFilter(changePasswordRequest("4.4.4.4"), new MockHttpServletResponse(), (req, res) -> {});
+        }
+
+        AtomicInteger chainCalls = new AtomicInteger();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(changePasswordRequest("4.4.4.4"), response, (req, res) -> chainCalls.incrementAndGet());
+
+        assertThat(chainCalls.get()).isZero();
+        assertThat(response.getStatus()).isEqualTo(429);
+    }
+
+    @Test
     void doesNotRateLimitOtherPaths() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/actuator/health");
         request.setRemoteAddr("9.9.9.9");
@@ -89,6 +103,12 @@ class RateLimitFilterTest {
 
     private MockHttpServletRequest registerRequest(String ip) {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/register");
+        request.setRemoteAddr(ip);
+        return request;
+    }
+
+    private MockHttpServletRequest changePasswordRequest(String ip) {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/users/me/password");
         request.setRemoteAddr(ip);
         return request;
     }

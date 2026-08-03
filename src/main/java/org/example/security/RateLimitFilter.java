@@ -22,15 +22,17 @@ import java.time.Duration;
 import java.util.Set;
 
 /**
- * Per-client-IP, per-endpoint request cap on the unauthenticated auth endpoints, so a script
- * hammering /login or /register can't brute-force credentials or flood the app/database.
- * Buckets live in a bounded, expiring cache rather than a plain map, so the limiter's own
- * memory use can't be turned into a DoS vector by rotating source IPs.
+ * Per-client-IP, per-endpoint request cap on endpoints where an attacker gets to try a secret
+ * repeatedly: /login and /register (credential brute-forcing / spam), and /users/me/password
+ * (a stolen-but-valid token still requires knowing the current password, so without this an
+ * attacker holding one could brute-force it). Buckets live in a bounded, expiring cache rather
+ * than a plain map, so the limiter's own memory use can't be turned into a DoS vector by
+ * rotating source IPs.
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private static final Set<String> LIMITED_PATHS = Set.of("/login", "/register");
+    private static final Set<String> LIMITED_PATHS = Set.of("/login", "/register", "/users/me/password");
 
     private final int capacity;
     private final int refillSeconds;
