@@ -63,12 +63,14 @@ Standard layered Spring Boot structure under `src/main/java/org/example/`:
   `@JsonInclude(NON_NULL)` so a failed login has no `token` key), `UserDetailsResponse` (`GET /users/me` body
   — id + username only, never the password hash), `MessageResponse` (generic message body used by
   `/register`, `/users/me`'s 404, and the rate limiter's 429 response).
-- `util/JwtUtil` — builds/signs JWTs with an RSA private key (RS256) and verifies them with the matching
-  public key (via `jjwt`), using `jwt.private-key`/`jwt.public-key`/`jwt.expiration-ms` from
-  `application.properties`. Asymmetric rather than HMAC on purpose: only the private key can mint tokens,
-  so the public key can later be handed to other services (or published, OIDC-style) that only need to
-  verify tokens without ever being trusted to forge one. Also embeds a custom `iatMillis` claim alongside
-  the standard `iat` — see "Session revocation" below for why.
+- `util/JwtUtil` — builds/signs JWTs with the active RSA private key (RS256, `kid` header set to
+  `jwt.active-key-id`) and verifies via a key-locator over every key in `jwt.keys` (`JwtProperties`), not
+  just the active one — see "Key rotation" below. Asymmetric rather than HMAC on purpose: only a private key
+  can mint tokens, so a public key can later be handed to other services (or published, OIDC-style) that
+  only need to verify tokens without ever being trusted to forge one. Also embeds a custom `iatMillis` claim
+  alongside the standard `iat` — see "Session revocation" below for why.
+- `util/JwtProperties` — `@ConfigurationProperties(prefix = "jwt")`; holds `activeKeyId`, `expirationMs`, and
+  `keys` (a list, not a single pair) so multiple keys can be known at once during a rotation.
 - `security/JwtAuthenticationFilter` — reads a `Bearer` token; if it's cryptographically valid, unexpired,
   *and* `AuthService.isSessionValid` says the session is still live, populates `SecurityContextHolder` with
   the username as principal. Doesn't reject requests itself; enforcement is via `authorizeHttpRequests` in
@@ -132,19 +134,39 @@ no admin/role system wired to it, on purpose: building RBAC wasn't asked for, an
 endpoint onto a mutation this sensitive would be worse than not exposing it yet. `UserControllerIntegrationTest`
 exercises it by calling the autowired `AuthService` bean directly.
 
+### Key rotation
+
+`jwt.keys` is a list, and `JwtUtil` verifies against a key-locator keyed by the token's `kid` header rather
+than a single hardcoded public key — this is what makes rotation possible without a "everyone gets logged
+out" event. To rotate: add a new entry to `jwt.keys`, point `jwt.active-key-id` at it, and keep the previous
+entry in the list (public key only — its private key can be deleted, since nothing signs with it anymore)
+until its already-issued tokens would have expired naturally anyway. Only then remove the old entry, at
+which point a token still bearing its `kid` is rejected as an unknown key. New tokens are always signed with
+whichever key `jwt.active-key-id` names; any entry in the list — active or retired — can still verify a
+token whose `kid` matches its own id.
+
+`JwtUtilTest` has three tests directly proving this works, not just that it compiles:
+`tokenSignedByAKeyThatIsStillKnownButNoLongerActiveIsStillAccepted` (rotation doesn't break outstanding
+tokens), `tokensMintedAfterRotationUseTheNewKeyNotTheRetiredOne` (new tokens actually use the new key), and
+`tokenSignedByAFullyRetiredKeyIsRejectedOnceThatKeyIsRemovedFromConfig` (full retirement does eventually cut
+a key off, so this isn't a mechanism that keeps every key alive forever by accident).
+
 ## Configuration
 
 `src/main/resources/application.properties`:
 - `spring.data.mongodb.uri` — defaults to `mongodb://localhost:27017/logindb`.
 - `spring.data.mongodb.auto-index-creation` — must stay `true`, or `@Indexed` annotations (the unique index
   on `User.username`) are silently never applied and duplicate usernames slip through.
-- `jwt.private-key` / `jwt.public-key` — RSA key pair (PKCS8 private / X.509 public, base64 DER, no PEM
-  headers); the checked-in values are development-only and must be overridden (env var or external config,
-  e.g. `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY`) before any real deployment. Regenerate with:
+- `jwt.active-key-id` — which entry in `jwt.keys` signs new tokens.
+- `jwt.keys[N].id` / `.private-key` / `.public-key` — RSA key(s) (PKCS8 private / X.509 public, base64 DER,
+  no PEM headers). `private-key` is required only for the entry matching `jwt.active-key-id`; other entries
+  (retired keys, kept only so their still-unexpired tokens keep verifying — see "Key rotation" above) need
+  just `public-key`. The checked-in dev key is development-only and must be overridden (env vars, e.g. one
+  secrets-manager-backed key per index, or external config) before any real deployment. Regenerate with:
   ```
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
-  openssl pkcs8 -topk8 -nocrypt -in private.pem -outform DER | base64 | tr -d '\n'   # -> jwt.private-key
-  openssl pkey -in private.pem -pubout -outform DER | base64 | tr -d '\n'            # -> jwt.public-key
+  openssl pkcs8 -topk8 -nocrypt -in private.pem -outform DER | base64 | tr -d '\n'   # -> keys[N].private-key
+  openssl pkey -in private.pem -pubout -outform DER | base64 | tr -d '\n'            # -> keys[N].public-key
   ```
   Must be `pkcs8 -topk8`, not `pkey -outform DER`, for the private key — on LibreSSL (macOS's default
   `/usr/bin/openssl`) `pkey -outform DER` emits traditional PKCS1 DER instead of PKCS8, which Java's
@@ -195,9 +217,11 @@ it has no way to know whether tests were actually added for what just changed. T
   `remoteAddr`) via `.with(fromIp(...))`. `RateLimitFilter`'s buckets are keyed by IP+path and live in a
   singleton bean shared across the whole test class, so without this, unrelated tests hitting `/login` from
   the same default MockMvc IP would silently drain each other's rate-limit allowance. `UserControllerIntegrationTest`'s
-  expired-token test mints its own token with a throwaway `JwtUtil` built from the app's real
-  `jwt.private-key`/`jwt.public-key` (`@Value`-injected) and a 1ms expiry, rather than overriding
+  expired-token test mints its own token with a throwaway `JwtUtil` built from the app's real, `@Autowired`
+  `JwtProperties` (same keys, copied into a new `JwtProperties` with a 1ms expiry), rather than overriding
   `jwt.expiration-ms` for the whole class — that would make even the "valid token" tests race against expiry.
+- `JwtUtilTest` covers rotation directly with three throwaway-key-pair scenarios (see "Key rotation" above)
+  rather than only testing the single-key happy path.
 
 ## Testing the API manually
 

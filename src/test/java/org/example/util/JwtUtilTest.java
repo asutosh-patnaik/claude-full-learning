@@ -2,14 +2,17 @@ package org.example.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Base64;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JwtUtilTest {
 
+    private static final String KEY_ID = "test-key";
     private static final TestRsaKeys.Pair KEYS = TestRsaKeys.generate();
 
     private JwtUtil newUtil(long expirationMs) {
-        return new JwtUtil(KEYS.privateKeyBase64(), KEYS.publicKeyBase64(), expirationMs);
+        return new JwtUtil(TestJwtProperties.singleKey(KEY_ID, KEYS, expirationMs));
     }
 
     @Test
@@ -74,10 +77,67 @@ class JwtUtilTest {
     void rejectsTokenSignedWithADifferentKeyPair() {
         JwtUtil signer = newUtil(60_000);
         TestRsaKeys.Pair otherKeys = TestRsaKeys.generate();
-        JwtUtil verifier = new JwtUtil(otherKeys.privateKeyBase64(), otherKeys.publicKeyBase64(), 60_000);
+        JwtUtil verifier = new JwtUtil(TestJwtProperties.singleKey(KEY_ID, otherKeys, 60_000));
 
         String token = signer.generateToken("alice");
 
         assertThat(verifier.isTokenValid(token)).isFalse();
+    }
+
+    @Test
+    void newTokensAreSignedWithTheActiveKeyId() {
+        JwtUtil jwtUtil = newUtil(60_000);
+
+        String token = jwtUtil.generateToken("alice");
+
+        String[] parts = token.split("\\.");
+        String header = new String(Base64.getUrlDecoder().decode(parts[0]));
+        assertThat(header).contains("\"kid\":\"" + KEY_ID + "\"");
+    }
+
+    @Test
+    void tokenSignedByAKeyThatIsStillKnownButNoLongerActiveIsStillAccepted() {
+        // Simulates rotation: a token minted while "old-key" was active must keep validating
+        // once the active key becomes "new-key", as long as old-key is kept around to verify with.
+        TestRsaKeys.Pair oldKeys = TestRsaKeys.generate();
+        TestRsaKeys.Pair newKeys = TestRsaKeys.generate();
+        JwtUtil beforeRotation = new JwtUtil(TestJwtProperties.singleKey("old-key", oldKeys, 60_000));
+        String tokenFromBeforeRotation = beforeRotation.generateToken("alice");
+
+        JwtUtil afterRotation = new JwtUtil(
+                TestJwtProperties.withRetiredKey("new-key", newKeys, "old-key", oldKeys, 60_000));
+
+        assertThat(afterRotation.isTokenValid(tokenFromBeforeRotation)).isTrue();
+        assertThat(afterRotation.extractUsername(tokenFromBeforeRotation)).isEqualTo("alice");
+    }
+
+    @Test
+    void tokensMintedAfterRotationUseTheNewKeyNotTheRetiredOne() {
+        TestRsaKeys.Pair oldKeys = TestRsaKeys.generate();
+        TestRsaKeys.Pair newKeys = TestRsaKeys.generate();
+        JwtUtil afterRotation = new JwtUtil(
+                TestJwtProperties.withRetiredKey("new-key", newKeys, "old-key", oldKeys, 60_000));
+
+        String token = afterRotation.generateToken("alice");
+
+        JwtUtil onlyKnowsOldKey = new JwtUtil(TestJwtProperties.singleKey("old-key", oldKeys, 60_000));
+        assertThat(onlyKnowsOldKey.isTokenValid(token)).isFalse();
+
+        JwtUtil onlyKnowsNewKey = new JwtUtil(TestJwtProperties.singleKey("new-key", newKeys, 60_000));
+        assertThat(onlyKnowsNewKey.isTokenValid(token)).isTrue();
+    }
+
+    @Test
+    void tokenSignedByAFullyRetiredKeyIsRejectedOnceThatKeyIsRemovedFromConfig() {
+        TestRsaKeys.Pair oldKeys = TestRsaKeys.generate();
+        TestRsaKeys.Pair newKeys = TestRsaKeys.generate();
+        JwtUtil beforeRotation = new JwtUtil(TestJwtProperties.singleKey("old-key", oldKeys, 60_000));
+        String tokenFromOldKey = beforeRotation.generateToken("alice");
+
+        // old-key has since been fully retired: no longer present in config at all, not even
+        // for verification.
+        JwtUtil afterFullRetirement = new JwtUtil(TestJwtProperties.singleKey("new-key", newKeys, 60_000));
+
+        assertThat(afterFullRetirement.isTokenValid(tokenFromOldKey)).isFalse();
     }
 }
