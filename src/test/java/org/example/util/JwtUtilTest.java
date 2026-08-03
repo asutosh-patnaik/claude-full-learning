@@ -1,8 +1,10 @@
 package org.example.util;
 
+import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
 
 import java.util.Base64;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -71,6 +73,37 @@ class JwtUtilTest {
         long afterMillis = System.currentTimeMillis();
         long issuedAtMillis = jwtUtil.extractIssuedAt(token).toEpochMilli();
         assertThat(issuedAtMillis).isBetween(beforeMillis, afterMillis);
+    }
+
+    @Test
+    void parseIfValidReturnsClaimsUsableForBothSubjectAndIssuedAtFromASingleParse() {
+        // Regression test: JwtAuthenticationFilter used to call isTokenValid/extractUsername/
+        // extractIssuedAt separately, each re-verifying the RSA signature. parseIfValid should let
+        // a caller pull every claim it needs off one verified parse.
+        JwtUtil jwtUtil = newUtil(60_000);
+        String token = jwtUtil.generateToken("alice");
+
+        Optional<Claims> claims = jwtUtil.parseIfValid(token);
+
+        assertThat(claims).isPresent();
+        assertThat(jwtUtil.extractUsername(claims.get())).isEqualTo("alice");
+        assertThat(jwtUtil.extractIssuedAt(claims.get())).isNotNull();
+    }
+
+    @Test
+    void parseIfValidReturnsEmptyForExpiredToken() throws InterruptedException {
+        JwtUtil jwtUtil = newUtil(1);
+        String token = jwtUtil.generateToken("alice");
+        Thread.sleep(20);
+
+        assertThat(jwtUtil.parseIfValid(token)).isEmpty();
+    }
+
+    @Test
+    void parseIfValidReturnsEmptyForMalformedToken() {
+        JwtUtil jwtUtil = newUtil(60_000);
+
+        assertThat(jwtUtil.parseIfValid("not-a-jwt")).isEmpty();
     }
 
     @Test

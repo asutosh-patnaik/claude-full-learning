@@ -7,9 +7,20 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Optional;
 
 @Service
 public class AuthService {
+
+    /**
+     * A valid-format BCrypt hash that no real user password will ever match. Used as the
+     * comparison target when the username doesn't exist, so {@link PasswordEncoder#matches} still
+     * runs its full cost — otherwise a missing username short-circuits before that call while an
+     * existing one doesn't, and the timing gap between the two lets an attacker enumerate valid
+     * usernames without ever guessing a password.
+     */
+    private static final String DUMMY_PASSWORD_HASH =
+            "$2a$10$CwTycUXWue0Thq9StjUM0uJ8/AtDATG.3IdHVCVN7ByWyj0N8Iny/S";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -20,10 +31,10 @@ public class AuthService {
     }
 
     public boolean authenticate(String username, String rawPassword) {
-        return userRepository.findByUsername(username)
-                .filter(user -> !user.isBlocked())
-                .map(user -> passwordEncoder.matches(rawPassword, user.getPassword()))
-                .orElse(false);
+        Optional<User> user = userRepository.findByUsername(username);
+        String hashToCheck = user.map(User::getPassword).orElse(DUMMY_PASSWORD_HASH);
+        boolean passwordMatches = passwordEncoder.matches(rawPassword, hashToCheck);
+        return user.filter(u -> !u.isBlocked()).isPresent() && passwordMatches;
     }
 
     /**

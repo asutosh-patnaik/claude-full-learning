@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Signs with the active RSA private key (only this service holds it) and verifies with whichever
@@ -85,21 +86,42 @@ public class JwtUtil {
     }
 
     public String extractUsername(String token) {
-        return parseClaims(token).getSubject();
+        return extractUsername(parseClaims(token));
+    }
+
+    public String extractUsername(Claims claims) {
+        return claims.getSubject();
     }
 
     /** Millisecond-precision issued-at, for session-invalidation comparisons. See generateToken. */
     public Instant extractIssuedAt(String token) {
-        Claims claims = parseClaims(token);
+        return extractIssuedAt(parseClaims(token));
+    }
+
+    /** Millisecond-precision issued-at, for session-invalidation comparisons. See generateToken. */
+    public Instant extractIssuedAt(Claims claims) {
         Long millis = claims.get(ISSUED_AT_MILLIS_CLAIM, Long.class);
         return millis != null ? Instant.ofEpochMilli(millis) : claims.getIssuedAt().toInstant();
     }
 
     public boolean isTokenValid(String token) {
+        return parseIfValid(token).isPresent();
+    }
+
+    /**
+     * Parses and signature-verifies the token exactly once, returning its claims iff it's
+     * cryptographically valid and unexpired (empty otherwise). Callers that need more than one
+     * claim off the same token — e.g. subject and issued-at — should use this instead of the
+     * single-claim {@code extract*(String)} methods, each of which does its own full parse; a
+     * request path pulling multiple claims that way would re-verify the RSA signature once per
+     * claim instead of once per token.
+     */
+    public Optional<Claims> parseIfValid(String token) {
         try {
-            return parseClaims(token).getExpiration().after(new Date());
+            Claims claims = parseClaims(token);
+            return claims.getExpiration().after(new Date()) ? Optional.of(claims) : Optional.empty();
         } catch (JwtException | IllegalArgumentException e) {
-            return false;
+            return Optional.empty();
         }
     }
 

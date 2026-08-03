@@ -17,9 +17,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -66,9 +66,9 @@ class AuthServiceTest {
         user.setPassword("hashed");
         user.setBlocked(true);
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("plain", "hashed")).thenReturn(true);
 
         assertThat(authService.authenticate("alice", "plain")).isFalse();
-        verifyNoInteractions(passwordEncoder);
     }
 
     @Test
@@ -76,7 +76,18 @@ class AuthServiceTest {
         when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
 
         assertThat(authService.authenticate("ghost", "whatever")).isFalse();
-        verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    void authenticateChecksAConstantDummyHashWhenUsernameDoesNotExist() {
+        // Regression test for a timing side-channel: if a missing username short-circuited
+        // without calling passwordEncoder.matches, response time would differ from an existing
+        // username and let an attacker enumerate valid accounts by timing alone.
+        when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
+
+        authService.authenticate("ghost", "whatever");
+
+        verify(passwordEncoder).matches(eq("whatever"), any());
     }
 
     @Test
