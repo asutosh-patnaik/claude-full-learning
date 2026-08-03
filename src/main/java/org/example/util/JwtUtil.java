@@ -13,6 +13,7 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Instant;
 import java.util.Date;
 
 /**
@@ -22,6 +23,8 @@ import java.util.Date;
  */
 @Component
 public class JwtUtil {
+
+    private static final String ISSUED_AT_MILLIS_CLAIM = "iatMillis";
 
     private final PrivateKey privateKey;
     private final PublicKey publicKey;
@@ -41,6 +44,13 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(username)
                 .issuedAt(now)
+                // Standard `iat` is second-precision (JWT numeric dates are whole seconds), which
+                // is too coarse for session-invalidation comparisons: a token minted in the same
+                // wall-clock second as a password change/block could floor to either side of the
+                // invalidation instant depending on sub-second timing, making the check
+                // unreliable in both directions. This claim carries full millisecond precision
+                // for that comparison specifically; `iat` itself is left alone for spec compliance.
+                .claim(ISSUED_AT_MILLIS_CLAIM, now.getTime())
                 .expiration(expiry)
                 .signWith(privateKey, Jwts.SIG.RS256)
                 .compact();
@@ -50,8 +60,11 @@ public class JwtUtil {
         return parseClaims(token).getSubject();
     }
 
-    public Date extractIssuedAt(String token) {
-        return parseClaims(token).getIssuedAt();
+    /** Millisecond-precision issued-at, for session-invalidation comparisons. See generateToken. */
+    public Instant extractIssuedAt(String token) {
+        Claims claims = parseClaims(token);
+        Long millis = claims.get(ISSUED_AT_MILLIS_CLAIM, Long.class);
+        return millis != null ? Instant.ofEpochMilli(millis) : claims.getIssuedAt().toInstant();
     }
 
     public boolean isTokenValid(String token) {
