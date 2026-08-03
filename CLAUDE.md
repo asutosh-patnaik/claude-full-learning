@@ -181,6 +181,45 @@ a key off, so this isn't a mechanism that keeps every key alive forever by accid
 - `ratelimit.capacity` / `ratelimit.refill-seconds` — requests allowed per client IP per endpoint
   (login/register), refilling every `refill-seconds` (default: 5 per 60s).
 
+## Deployment
+
+Three interchangeable ways to run locally, kept deliberately: `./mvnw spring-boot:run`, running the built
+jar directly, and `docker compose up --build` (see README's Getting Started). None is being deprecated in
+favor of another — the jar/spring-boot:run paths are the faster edit-compile-run loop; Docker is for
+verifying the actual shipped artifact and for the Kubernetes path below, which builds on the same image.
+
+**`Dockerfile`** is a two-stage build (JDK to compile, bare JRE to run) specifically so the shipped image
+never carries Maven, the JDK, or source — only `app.jar` and a JRE. `.mvn/` (the wrapper) is copied in
+before `src/`, deliberately, so `docker build` can cache the `dependency:go-offline` layer across
+source-only changes instead of re-resolving every dependency on every build.
+
+**`k8s/`** manifests are intentionally minimal, not production-shaped: `mongo.yaml` has no auth and no
+`PersistentVolumeClaim` (data is lost on pod restart — acceptable for this demo, not for anything real),
+and `app.yaml` uses TCP-socket readiness/liveness probes rather than an HTTP health check, because there is
+no `/actuator/health` (Spring Boot Actuator isn't a dependency) and every real route requires either `POST`
+or a valid JWT — a plain `GET` health probe would misreport the app as unhealthy. `app.yaml`'s
+`imagePullPolicy: Never` assumes the image was loaded via `minikube image load`, not pulled from a registry
+— there is no registry involved in this setup at all.
+
+**`k8s/secret.yaml`** reuses the exact same dev RSA key pair as `application.properties` (generated
+programmatically from it, not retyped, to eliminate transcription risk with base64 blobs of that length —
+see the git history for the exact approach). A real deployment would source this from an actual secrets
+manager, not a Kubernetes `Secret` checked into git; this is a demo of the deployment mechanics, not a
+secrets-management story.
+
+This was deployed to a real local minikube cluster and verified end-to-end (register → login → `/users/me`,
+confirming the RSA `kid` header and rate-limit `429` both work identically inside the cluster) before these
+manifests were checked in — not just written and assumed correct.
+
+**`postman/claude-full-learning.postman_collection.json`** — one gotcha worth not repeating: a Postman
+collection variable's stored default value containing a dynamic variable (e.g. `"alice-{{$randomInt}}"`)
+re-resolves to a *fresh* random value on every single reference to that variable, not once per collection
+run. Storing a "random username" this way silently produces a different username each time `{{username}}`
+is used, breaking any test that registers a user and later expects to log in as the same one — found by
+actually running the collection with Newman rather than only inspecting the JSON. Fixed with a
+collection-level pre-request script that generates the value once (`Date.now()`-based) and reuses it via
+`pm.collectionVariables`.
+
 ## Testing policy
 
 Every change to functionality ships with tests in the same change, not as a follow-up:

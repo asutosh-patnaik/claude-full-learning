@@ -1,0 +1,8 @@
+target/
+.git/
+.idea/
+.github/
+.claude/
+k8s/
+postman/
+*.md
