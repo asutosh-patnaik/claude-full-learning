@@ -33,6 +33,13 @@ java -jar target/claude-full-learning-1.0-SNAPSHOT.jar
 # Run a single test class
 ./mvnw -Dtest=ClassName test
 
+# Run only unit tests, the same way ci.yml's fast job does (excludes *IntegrationTest)
+./mvnw test -Dtest='!*IntegrationTest'
+
+# Check / fix formatting (what ci.yml's build job gates on — see "Continuous integration" below)
+./mvnw spotless:check
+./mvnw spotless:apply
+
 # View the coverage report after any of the above
 open target/site/jacoco/index.html
 ```
@@ -219,6 +226,60 @@ is used, breaking any test that registers a user and later expects to log in as 
 actually running the collection with Newman rather than only inspecting the JSON. Fixed with a
 collection-level pre-request script that generates the value once (`Date.now()`-based) and reuses it via
 `pm.collectionVariables`.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` — CI only, no deployment (CD to AWS EKS is a deliberately separate, later piece
+of work). Runs on push/PR to `master`; a new push cancels its own branch's still-running CI via
+`concurrency` rather than letting stale and fresh runs both finish.
+
+Six jobs, chained with `needs` so each only runs if the previous succeeded: `build` (`clean compile` +
+`spotless:check` as its own step) → `unit-tests` (`test -Dtest='!*IntegrationTest'`) → `integration-tests`
+(`verify` — see below for why this isn't filtered) → `packaging` (`-DskipTests package`, since tests already
+gated the build above) → `docker-build` (image built, tagged with the full commit SHA, **not pushed** —
+registry publishing is CD scope) → `publish-artifacts` (re-uploads everything the prior jobs uploaded as one
+`ci-build-output` bundle, keyed on `github.run_id`, for a future CD workflow to consume).
+
+**Why `integration-tests` runs the unfiltered `verify` instead of filtering to just the integration
+classes**: this project has no Failsafe/Surefire split — both kinds of test run under Surefire in the `test`
+phase (see "Tests" below), distinguished only by naming convention and by what's inside them (Mockito vs.
+`@SpringBootTest` + Testcontainers), not by which Maven plugin executes them. `mvn verify` is therefore the
+only command that reproduces the actual documented coverage baseline (96.5% line / 87.5% branch); filtering
+this job to `*IntegrationTest` only, the same way `unit-tests` filters to everything else, would make the
+JaCoCo `check` gate evaluate partial-suite coverage and pass or fail for a reason that has nothing to do
+with whether the change under test is actually well-covered. The unit tests re-running here (having already
+run once in the `unit-tests` job) is the accepted cost of keeping that gate meaningful, not an oversight.
+
+**`spotless-maven-plugin`** (in `pom.xml`) is the formatting/quality gate for stage 2, deliberately configured
+with a gentle rule set (`removeUnusedImports`, `trimTrailingWhitespace`, `endWithNewline`, 4-space `indent`)
+rather than a full reformatter like `google-java-format` — the latter would rewrite this codebase's existing
+brace/wrapping style wholesale in one unreviewable diff just to add a CI gate. It is **not** bound to any
+Maven lifecycle phase, on purpose: `./mvnw compile`/`test`/`verify` behave exactly as already documented
+above, unaffected by formatting, for the local dev loop and the Stop hook alike. Only `ci.yml` calls
+`spotless:check` (and a developer would call `spotless:apply` to fix violations) as an explicit, separate
+step — so a formatting failure is visibly distinct from a compile or test failure in the CI log.
+
+**No `services:` block for MongoDB anywhere in `ci.yml`**: Testcontainers already starts and tears down its
+own MongoDB container per test class directly against the runner's Docker daemon (present by default on
+`ubuntu-latest`), which is exactly the isolation "Ensure tests run in an isolated environment" is asking for
+— adding a GitHub Actions `services:` MongoDB on top would be a second, unused Mongo instance.
+
+**`.github/actions/setup-java-maven`** is a composite action (checkout + JDK + Maven dependency cache),
+shared by the `build`/`unit-tests`/`integration-tests`/`packaging` jobs so the Java version has exactly one
+place to change. Each job still does its own `actions/checkout` and full recompile: GitHub Actions jobs run
+on separate, fresh runners with no shared filesystem, so `needs` only orders execution — it does not carry
+compiled output between jobs. Only the Maven dependency cache (keyed on `pom.xml`) is actually reused across
+jobs; Docker layer caching for `docker-build` instead uses the GitHub Actions cache backend
+(`cache-from`/`cache-to: type=gha`), since that job doesn't touch Maven's own cache at all.
+
+**Immutable image tag** = the full commit SHA (`docker/metadata-action`'s `type=sha,format=long`); a
+floating branch-name tag rides alongside for local convenience only and is never what identity is keyed on.
+The image is built but never pushed (`push: false`) — no registry, no ECR, no Kubernetes apply — because
+this workflow is CI, not CD; that boundary is intentional, not an oversight to fix later in this same file.
+
+Branch protection requiring these checks on `master` is a **repository setting**, not something a workflow
+YAML can express — see README's Continuous integration section for the exact steps (it also isn't retroactive:
+each job name only appears in the branch-protection picklist after it has completed at least once).
 
 ## Testing policy
 

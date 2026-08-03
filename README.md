@@ -320,13 +320,63 @@ Dockerfile               Multi-stage build (JDK to compile, JRE to run)
 docker-compose.yml        App + MongoDB, for local containerized dev
 k8s/                      Kubernetes manifests (mongo, app-secrets, app) for minikube
 postman/                  Postman collection covering the full API + edge cases
+.github/workflows/ci.yml  CI pipeline: build, test, coverage gate, package, Docker build
+.github/actions/          Composite action shared by ci.yml's jobs (JDK + Maven cache setup)
 ```
 
 Full breakdown of each class's responsibilities: [CLAUDE.md's Architecture section](CLAUDE.md#architecture).
 
 ## Continuous integration
 
-Pull requests in this repository are automatically reviewed by Claude via GitHub Actions
+`.github/workflows/ci.yml` runs on every push and pull request targeting `master`. It's CI only — no
+deployment step exists yet; a CD workflow (AWS EKS) is planned as a separate, later addition and will pick
+up where this one leaves off (the packaged jar and Docker image this pipeline produces). A push/PR update
+cancels its own previous still-running CI run (`concurrency`) rather than letting both finish.
+
+Jobs run in this order, each gated on the previous one via `needs`:
+
+1. **`build`** — `./mvnw clean compile`, then `./mvnw spotless:check` as its own step. Spotless
+   (`spotless-maven-plugin`, configured in `pom.xml`) enforces a deliberately gentle rule set — trims
+   trailing whitespace, removes unused imports, enforces 4-space indentation, ensures a trailing newline —
+   not a full reformatter like google-java-format, so it catches real hygiene issues without rewriting the
+   whole codebase's brace/wrapping style in one diff. It isn't bound to any Maven lifecycle phase, so plain
+   `./mvnw compile/test/verify` behave exactly as documented above; only CI calls `spotless:check` directly.
+2. **`unit-tests`** — `./mvnw test -Dtest='!*IntegrationTest'`, i.e. everything except
+   `AuthControllerIntegrationTest`/`UserControllerIntegrationTest`. Fast, Docker-free feedback. Test results
+   are published as GitHub check annotations (`dorny/test-reporter`) and as a downloadable
+   `unit-test-reports` artifact.
+3. **`integration-tests`** — `./mvnw verify`, the full suite plus the JaCoCo coverage gate (see
+   [Testing](#testing) above). This project has no Surefire/Failsafe split (both unit and integration tests
+   run under Surefire in the `test` phase — see [CLAUDE.md's Tests section](CLAUDE.md#tests)), so `verify` is
+   the only command that reproduces the documented coverage baseline; that's why this stage re-runs the unit
+   tests rather than filtering down to only the integration classes. No `services:` block for MongoDB —
+   Testcontainers starts its own container directly against the runner's already-present Docker daemon.
+   Publishes `integration-test-reports` and `coverage-report` (the JaCoCo HTML report) as artifacts.
+4. **`packaging`** — `./mvnw -DskipTests package` (tests already ran and gated the build above) plus a
+   generated `build-info.json` (git SHA, ref, workflow run id/number, build timestamp). Uploaded as
+   `application-jar`.
+5. **`docker-build`** — builds the image via `docker/build-push-action`, tagged with the full commit SHA
+   (immutable) and the branch name (floating, for convenience only). Not pushed anywhere (`push: false`) —
+   registry/ECR publishing is deployment scope, out of bounds for this pipeline. Uses the GitHub Actions
+   cache backend (`cache-from/to: type=gha`) for Docker layer caching. Image metadata (`docker image
+   inspect` output) is uploaded as `docker-image-metadata`.
+6. **`publish-artifacts`** — downloads every artifact the jobs above uploaded and re-uploads them as one
+   `ci-build-output` bundle, so a future CD workflow can fetch a single artifact for this run
+   (`github.run_id`) instead of knowing each job's individual artifact name.
+
+The `build`/`unit-tests`/`integration-tests`/`packaging` jobs share a composite action
+(`.github/actions/setup-java-maven`) for JDK + Maven dependency-cache setup, so the Java version has exactly
+one place to change. Each job still runs its own `actions/checkout` and re-compiles — GitHub Actions jobs
+don't share a filesystem, so `needs` orders jobs but doesn't carry build output between them (only the Maven
+dependency cache is actually reused across jobs).
+
+**Branch protection**: this pipeline is only a gate if `master` is configured to require it. Under
+**Settings → Branches → Add branch protection rule** (pattern `master`), enable "Require status checks to
+pass before merging" and select the `build`, `unit-tests`, `integration-tests`, `packaging`, `docker-build`
+job names (each check run must have completed at least once for it to appear in the picklist). This isn't
+set automatically by adding `ci.yml` — it's a separate repository setting.
+
+Pull requests in this repository are also automatically reviewed by Claude via GitHub Actions
 (`.github/workflows/claude-code-review.yml` and `claude.yml`, installed via Claude Code's
 `/install-github-app`). Mention `@claude` in a PR or issue comment to invoke it directly — for example,
 `@claude review this PR` or `@claude` followed by any other instruction.

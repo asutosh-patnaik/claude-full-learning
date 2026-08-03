@@ -1,0 +1,24 @@
+name: Set up Java & Maven cache
+description: >
+  Installs the Temurin JDK this project builds with and restores the Maven
+  dependency cache. Shared by every ci.yml job so the Java version lives in
+  exactly one place. Does not check out the repo - callers do that themselves,
+  since actions/checkout must be the first step in the calling job anyway.
+
+inputs:
+  java-version:
+    description: JDK version to install
+    required: false
+    default: "17"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK (Temurin)
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+        # Keyed on pom.xml; shared by all jobs so dependency resolution only
+        # pays its full cost once per pom.xml change, not once per job.
+        cache: maven
