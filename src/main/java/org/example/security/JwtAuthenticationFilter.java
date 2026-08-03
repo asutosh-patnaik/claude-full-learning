@@ -1,5 +1,6 @@
 package org.example.security;
 
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +18,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Populates the SecurityContext from a Bearer JWT, if present, cryptographically valid, and
@@ -47,9 +49,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
-            if (jwtUtil.isTokenValid(token)) {
-                String username = jwtUtil.extractUsername(token);
-                Instant issuedAt = jwtUtil.extractIssuedAt(token);
+            Optional<Claims> claims = jwtUtil.parseIfValid(token);
+            if (claims.isPresent()) {
+                String username = jwtUtil.extractUsername(claims.get());
+                Instant issuedAt = jwtUtil.extractIssuedAt(claims.get());
                 if (authService.isSessionValid(username, issuedAt)) {
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                             username, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
