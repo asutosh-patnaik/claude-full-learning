@@ -5,6 +5,7 @@ metadata:
   namespace: {{ include "claude-full-learning.namespace" . }}
   labels:
     {{- include "claude-full-learning.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
 spec:
   type: {{ .Values.service.type }}
   selector:

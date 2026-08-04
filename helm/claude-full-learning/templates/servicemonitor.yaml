@@ -1,0 +1,23 @@
+{{- if .Values.serviceMonitor.enabled }}
+# Requires scripts/observability.sh to have installed kube-prometheus-stack first. The `release:`
+# label isn't strictly required by that chart's current default (serviceMonitorSelector: {}
+# matches all ServiceMonitors cluster-wide out of the box), but it's kept for forward-compatibility
+# in case that default is ever tightened on this cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "claude-full-learning.fullname" . }}
+  namespace: {{ include "claude-full-learning.namespace" . }}
+  labels:
+    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    release: {{ .Values.serviceMonitor.prometheusRelease }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "claude-full-learning.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: app
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 15s
+{{- end }}
