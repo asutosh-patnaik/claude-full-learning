@@ -26,6 +26,10 @@ Options:
   --local-port <port>   Local port for the port-forward used to health/smoke check (default: 18080).
   --help                Show this help.
 
+Environment variables (--source ghcr only, for a private GHCR package):
+  GHCR_PULL_PAT         A GitHub PAT with read:packages, used to create an imagePullSecret.
+  GHCR_PULL_USERNAME    The GitHub username that PAT belongs to. Both required together.
+
 Requires helm/claude-full-learning/values-<env>.secrets.yaml to already exist (never committed -
 see values-secrets.yaml.example and docs/deployment.md).
 EOF
@@ -63,6 +67,23 @@ case "$SOURCE" in
   ghcr)
     log_info "using GHCR image ${IMAGE_REPOSITORY_DEFAULT}:${TAG} (cluster pulls directly)"
     IMAGE_ARGS+=(--set "image.tag=${TAG}")
+    # Private GHCR package fallback. Credential is read from the shell environment only - never
+    # written to a file or passed as a literal --set value (which would land in shell history).
+    if [[ -n "${GHCR_PULL_PAT:-}" ]]; then
+      if [[ -z "${GHCR_PULL_USERNAME:-}" ]]; then
+        log_error "GHCR_PULL_PAT is set but GHCR_PULL_USERNAME is not - both are required"
+        exit 1
+      fi
+      log_info "GHCR_PULL_PAT set - creating/updating imagePullSecret 'ghcr-pull-secret' in ${NAMESPACE}"
+      kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$NAMESPACE"
+      kubectl create secret docker-registry ghcr-pull-secret \
+        --docker-server=ghcr.io \
+        --docker-username="${GHCR_PULL_USERNAME}" \
+        --docker-password="${GHCR_PULL_PAT}" \
+        -n "$NAMESPACE" \
+        --dry-run=client -o yaml | kubectl apply -f -
+      IMAGE_ARGS+=(--set "image.pullSecretName=ghcr-pull-secret")
+    fi
     ;;
   local)
     log_info "building local image claude-full-learning:${TAG} and loading into minikube..."

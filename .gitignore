@@ -37,3 +37,7 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Secrets - real values never committed, see values-secrets.yaml.example ###
+helm/**/values-*.secrets.yaml
+.env
