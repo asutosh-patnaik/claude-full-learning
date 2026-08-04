@@ -37,8 +37,14 @@ helm repo add grafana https://grafana.github.io/helm-charts >/dev/null
 helm repo update >/dev/null
 
 log_info "installing kube-prometheus-stack (Prometheus + Grafana + Alertmanager)..."
+# grafana.additionalDataSources pre-wires a Loki datasource pointing at the Loki release installed
+# below - without this, kube-prometheus-stack's bundled Grafana only auto-provisions Prometheus and
+# Alertmanager (confirmed via its own /api/datasources), so Explore has nothing to query logs with
+# until someone adds Loki by hand. The URL is in-cluster DNS for the "loki" release's gateway
+# Service, resolvable regardless of install order since it's only evaluated at query time, not here.
 helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
   -n monitoring --create-namespace \
+  --set-json 'grafana.additionalDataSources=[{"name":"Loki","type":"loki","access":"proxy","url":"http://loki-gateway.monitoring.svc.cluster.local","isDefault":false,"jsonData":{"maxLines":1000}}]' \
   --wait --timeout 5m
 
 log_info "installing Loki (Monolithic mode, filesystem storage - no S3/MinIO needed locally)..."
@@ -73,3 +79,4 @@ helm upgrade --install promtail grafana/promtail \
 
 log_info "done. Grafana: kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80"
 log_info "Grafana admin password: kubectl get secret -n monitoring monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d"
+log_info "Loki is pre-wired as a Grafana datasource - use Explore, pick 'Loki', query e.g. {namespace=\"claude-full-learning-dev\"}"

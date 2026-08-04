@@ -90,6 +90,18 @@ single-tenant local demo; if you ever re-enable multi-tenancy, Promtail's client
 [`tenant` stage](https://grafana.com/docs/loki/latest/send-data/promtail/stages/tenant/) added, or
 logs will disappear with no obvious error on the Promtail side.
 
+## Grafana → Explore has no "Loki" option
+
+`kube-prometheus-stack`'s bundled Grafana only auto-provisions Prometheus and Alertmanager on its
+own - Loki has to be added as a datasource explicitly, which `scripts/observability.sh` does via
+`--set-json 'grafana.additionalDataSources=[...]'` on the `kube-prometheus-stack` install. If you
+installed the stack before this was added (or ran a bare `helm install monitoring
+prometheus-community/kube-prometheus-stack` by hand without that flag), re-run
+`scripts/observability.sh` - it's `helm upgrade --install`, so it patches the existing release in
+place rather than requiring a full reinstall. Confirm it worked: `kubectl port-forward -n monitoring
+svc/monitoring-grafana 3000:80`, log in, Connections → Data sources, and check for "Loki" alongside
+"Prometheus"/"Alertmanager".
+
 ## `scripts/observability.sh` fails to install Loki
 
 A few non-obvious flags are required for the chart's Monolithic (single-binary) mode to actually

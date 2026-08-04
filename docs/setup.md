@@ -75,6 +75,11 @@ The "claude-full-learning" dashboard only shows real data once the app's been de
 `--set serviceMonitor.enabled=true --set grafanaDashboard.enabled=true` - see
 [deployment.md](deployment.md)'s observability section.
 
+**App logs, via Grafana → Explore** (no extra setup - `observability.sh` pre-wires Loki as a Grafana
+datasource): open Grafana as above, go to **Explore**, pick the **Loki** datasource, and query e.g.
+`{namespace="claude-full-learning-dev"}`. This is the normal way to look at logs; direct Loki API
+access below is mainly for debugging or scripting.
+
 **Prometheus** and **Loki**, directly (mainly for debugging - Grafana is the normal way to look at
 either):
 

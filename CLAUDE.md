@@ -340,7 +340,12 @@ previously-hit failure modes: [`docs/troubleshooting.md`](docs/troubleshooting.m
 node-exporter + kube-state-metrics) plus `grafana-community/loki` (Monolithic mode, filesystem storage —
 the originally-planned `loki-stack` chart turned out deprecated, and Loki itself moved to a new
 `grafana-community` org in March 2026) and `grafana/promtail` for log shipping (no application logging
-code changes — Spring Boot already logs to stdout, Promtail tails container logs directly). The chart's
+code changes — Spring Boot already logs to stdout, Promtail tails container logs directly).
+`scripts/observability.sh` also passes `--set-json 'grafana.additionalDataSources=[...]'` on the
+`kube-prometheus-stack` install to pre-wire Loki as a Grafana datasource — without it, that chart's
+bundled Grafana only auto-provisions Prometheus and Alertmanager (confirmed via its own
+`/api/datasources`), so Explore would have nothing to query logs with until someone added Loki by
+hand. The chart's
 `templates/servicemonitor.yaml` and `templates/grafana-dashboard-configmap.yaml` are both off by default
 (`serviceMonitor.enabled`/`grafanaDashboard.enabled`), turned on once `scripts/observability.sh` has
 installed the stack. `management.metrics.distribution.percentiles-histogram.http.server.requests=true`
