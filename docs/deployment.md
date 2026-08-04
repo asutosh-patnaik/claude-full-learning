@@ -89,7 +89,8 @@ helm upgrade claude-full-learning helm/claude-full-learning \
 Verify: `kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090` and
 check the Targets page for `serviceMonitor/claude-full-learning-dev/claude-full-learning/0` showing
 `up`; `kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80` and look for a
-"claude-full-learning" dashboard. If either doesn't show up, see
+"claude-full-learning" dashboard (see [setup.md](setup.md)'s "Accessing the dashboards" section for
+the Grafana login and the Kubernetes dashboard too). If either doesn't show up, see
 [troubleshooting.md](troubleshooting.md) - both had real, non-obvious causes during development.
 
 ## Rollback

@@ -48,6 +48,41 @@ deploys and runs fine without it; you just won't get metrics/dashboards/log aggr
 this once per cluster. See [deployment.md](deployment.md) for how to then turn on scraping/dashboard
 for the app itself.
 
+### Accessing the dashboards
+
+**Kubernetes dashboard** (minikube's built-in `dashboard` addon, enabled by `start.sh`):
+
+```bash
+minikube dashboard
+```
+
+Opens directly in your browser - it's a foreground process, leave the terminal running. Use
+`minikube dashboard --url` instead to just print the URL without auto-opening.
+
+**Grafana** (once `observability.sh` has installed the monitoring stack):
+
+```bash
+kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+```
+
+Then browse to `http://localhost:3000`. Username is `admin`; get the generated password with:
+
+```bash
+kubectl get secret -n monitoring monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d
+```
+
+The "claude-full-learning" dashboard only shows real data once the app's been deployed with
+`--set serviceMonitor.enabled=true --set grafanaDashboard.enabled=true` - see
+[deployment.md](deployment.md)'s observability section.
+
+**Prometheus** and **Loki**, directly (mainly for debugging - Grafana is the normal way to look at
+either):
+
+```bash
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090   # → http://localhost:9090
+kubectl port-forward -n monitoring svc/loki-gateway 3100:80                              # → http://localhost:3100
+```
+
 ## Ingress host access (dev/test/production overlays all enable Ingress by default)
 
 `scripts/deploy.sh`'s own health checks and smoke tests use `kubectl port-forward`, not Ingress, so
