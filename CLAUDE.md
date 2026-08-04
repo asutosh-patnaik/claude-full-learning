@@ -187,6 +187,13 @@ a key off, so this isn't a mechanism that keeps every key alive forever by accid
 - `jwt.expiration-ms` — token lifetime in milliseconds (default 1 hour).
 - `ratelimit.capacity` / `ratelimit.refill-seconds` — requests allowed per client IP per endpoint
   (login/register), refilling every `refill-seconds` (default: 5 per 60s).
+- `management.endpoints.web.exposure.include` — deliberately just `health,prometheus,info`, not a wider
+  list; these endpoints are unauthenticated in `SecurityConfig` (kubelet/Prometheus can't present a JWT).
+- `management.endpoint.health.probes.enabled` / `management.health.{liveness,readiness}state.enabled` —
+  splits `/actuator/health` into `/actuator/health/liveness` and `/actuator/health/readiness`, used by the
+  Helm chart's Deployment probes (see "Continuous deployment" below).
+- `management.metrics.distribution.percentiles-histogram.http.server.requests` — exports histogram buckets
+  (not just count/sum/max) so the Grafana dashboard's latency panel can compute real percentiles.
 
 ## Deployment
 
@@ -202,9 +209,10 @@ source-only changes instead of re-resolving every dependency on every build.
 
 **`k8s/`** manifests are intentionally minimal, not production-shaped: `mongo.yaml` has no auth and no
 `PersistentVolumeClaim` (data is lost on pod restart — acceptable for this demo, not for anything real),
-and `app.yaml` uses TCP-socket readiness/liveness probes rather than an HTTP health check, because there is
-no `/actuator/health` (Spring Boot Actuator isn't a dependency) and every real route requires either `POST`
-or a valid JWT — a plain `GET` health probe would misreport the app as unhealthy. `app.yaml`'s
+and `app.yaml` uses TCP-socket readiness/liveness probes rather than an HTTP health check. That predates
+Spring Boot Actuator being added to the project (see "Continuous deployment" below, which does use real
+`/actuator/health` HTTP probes via the Helm chart) and is left unchanged deliberately — these manifests stay
+the simplest possible way to run the app on minikube, not a target for every later addition. `app.yaml`'s
 `imagePullPolicy: Never` assumes the image was loaded via `minikube image load`, not pulled from a registry
 — there is no registry involved in this setup at all.
 
@@ -229,8 +237,10 @@ collection-level pre-request script that generates the value once (`Date.now()`-
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` — CI only, no deployment (CD to AWS EKS is a deliberately separate, later piece
-of work). Runs on push/PR to `master`; a new push cancels its own branch's still-running CI via
+`.github/workflows/ci.yml` — CI only, no deployment (CD is a deliberately separate piece of work — see
+"Continuous deployment" below; it publishes to GHCR and deploys to local minikube via Helm, not AWS/EKS,
+which was the original placeholder plan before the free-tooling constraint made GHCR + minikube the actual
+target). Runs on push/PR to `master`; a new push cancels its own branch's still-running CI via
 `concurrency` rather than letting stale and fresh runs both finish.
 
 Six jobs, chained with `needs` so each only runs if the previous succeeded: `build` (`clean compile` +
@@ -287,6 +297,68 @@ record from being generated at all rather than filter around it after the fact.
 Branch protection requiring these checks on `master` is a **repository setting**, not something a workflow
 YAML can express — see README's Continuous integration section for the exact steps (it also isn't retroactive:
 each job name only appears in the branch-protection picklist after it has completed at least once).
+
+## Continuous deployment
+
+Two disconnected halves joined by one manual step, not a single automated pipeline — see
+[`docs/architecture.md`](docs/architecture.md) for the full diagram and why: GitHub-hosted Actions runners
+have no network path to a developer's local minikube, so "push to deploy" all the way through isn't
+possible without registering a self-hosted runner (a real option, deliberately not taken here — it trades
+this clean split for a persistent listener process with access to the local machine).
+
+**`.github/workflows/cd.yml`** — cloud, fully automatic. Builds and pushes to
+`ghcr.io/asutosh-patnaik/claude-full-learning` on push to `master` and on `v*` tags, using the built-in
+`GITHUB_TOKEN` (no new secret). Immutable full-SHA tag always; semver tags only on `v*` tags; floating
+`latest` only from `master`. Re-runs its own Docker build rather than consuming `ci.yml`'s image (no clean
+way to hand a loaded image between separate workflow *runs*), reusing the same `type=gha` cache layer
+`ci.yml` just populated. Includes its own `mvnw verify` first, since a `v*` tag push can point at any
+commit, not just a reviewed/CI-passed one — `master` pushes are covered by branch protection instead.
+
+**`helm/claude-full-learning/`** — a Helm chart parallel to the plain `k8s/` manifests (kept exactly as-is,
+untouched by this work). Deployment, Service, ConfigMap, Secret, Namespace, ServiceAccount, Ingress, HPA,
+an in-chart Mongo (same no-auth/no-PVC demo posture as `k8s/mongo.yaml`, deliberately not a Bitnami
+subchart — see the chart's own `mongo-deployment.yaml` comment), plus `values.yaml` defaults and
+`values-{dev,test,production}.yaml` overlays that change only what genuinely differs for a local demo
+(replica count, ingress host, log level, and — production only — bumped resources with autoscaling
+actually turned on). Real HTTP health probes (`/actuator/health/{liveness,readiness}`) replace `k8s/
+app.yaml`'s TCP-only probes — the payoff of adding Actuator. Each `values-<env>.yaml` fixes its own
+`namespace.name`, which always wins over whatever `-n` a `helm` command is given — `scripts/deploy.sh`
+keeps the two in sync by deriving both from the same `<env>` argument; a hand-run `helm` command must do
+the same or resources land somewhere unexpected.
+
+**`scripts/*.sh`** (+ shared helpers in `scripts/lib/`) — the local half: `start.sh` (minikube + required
+addons), `observability.sh` (Prometheus/Grafana/Loki, once per cluster, optional), `deploy.sh` (the actual
+Phase-4-style sequence: resolve image → `helm upgrade --install` → rollout wait → health check → Newman
+smoke tests against the existing `postman/` collection → automatic `helm rollback` on any failure from
+that point on), `test.sh` (`mvnw verify`, or `--smoke <url>` for just the Newman portion), `rollback.sh`
+(manual undo + re-verify), `destroy.sh` (the one script with real confirmation gating — uninstalling one
+release vs. `minikube delete` are never behind the same flag). Full walkthrough:
+[`docs/deployment.md`](docs/deployment.md); recovery: [`docs/rollback.md`](docs/rollback.md); real,
+previously-hit failure modes: [`docs/troubleshooting.md`](docs/troubleshooting.md).
+
+**Observability** — `prometheus-community/kube-prometheus-stack` (Prometheus + Grafana + Alertmanager +
+node-exporter + kube-state-metrics) plus `grafana-community/loki` (Monolithic mode, filesystem storage —
+the originally-planned `loki-stack` chart turned out deprecated, and Loki itself moved to a new
+`grafana-community` org in March 2026) and `grafana/promtail` for log shipping (no application logging
+code changes — Spring Boot already logs to stdout, Promtail tails container logs directly). The chart's
+`templates/servicemonitor.yaml` and `templates/grafana-dashboard-configmap.yaml` are both off by default
+(`serviceMonitor.enabled`/`grafanaDashboard.enabled`), turned on once `scripts/observability.sh` has
+installed the stack. `management.metrics.distribution.percentiles-histogram.http.server.requests=true`
+(in `application.properties`) is the one additional Actuator property beyond Phase 0's baseline — it's
+what lets the Grafana dashboard's latency panel compute real p50/p95 via `histogram_quantile` instead of
+just an average. See `docs/troubleshooting.md` for the several non-obvious flags Loki's chart needed
+(`useTestSchema`, zeroed SimpleScalable replicas, disabled memcached sidecars, disabled multi-tenancy) and
+the real Service-labeling bug the ServiceMonitor work surfaced (fixed in `templates/service.yaml`).
+
+**Secrets** — real values never committed. `helm/claude-full-learning/values-<env>.secrets.yaml` (one per
+environment) is gitignored (`helm/**/values-*.secrets.yaml`); `values-secrets.yaml.example` is the tracked
+template, cross-referencing `application.properties`'s existing RSA key-generation recipe rather than a
+new one. `templates/secret.yaml` fails the Helm render loudly if `secrets.jwtPrivateKey` is still empty,
+so a forgotten `-f values-<env>.secrets.yaml` can't silently deploy a broken app. `k8s/secret.yaml`
+already has real dev RSA key material checked into git — a known, pre-existing, out-of-scope-to-fix-here
+shortcut for that minimal demo path, not a pattern the Helm path follows. A private GHCR package's pull
+credential (`GHCR_PULL_PAT`/`GHCR_PULL_USERNAME`) is read only from the shell environment inside
+`deploy.sh`, never written to a file or passed as a literal `--set` argument.
 
 ## Testing policy
 

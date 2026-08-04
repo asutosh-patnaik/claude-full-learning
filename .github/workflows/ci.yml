@@ -1,8 +1,10 @@
 name: CI
 
-# CI only. No deployment logic lives here: no AWS calls, no Kubernetes apply,
-# no image push. That is intentionally deferred to a future CD workflow that
-# will pick up where the docker-build/publish-artifacts jobs below leave off.
+# CI only. No deployment logic lives here: no Kubernetes apply, no image push.
+# That's cd.yml's job (publishes to GHCR) plus scripts/deploy.sh (the actual
+# Helm install against local minikube - GitHub-hosted runners can't reach it,
+# see docs/architecture.md) - both pick up where docker-build/publish-artifacts
+# below leave off.
 on:
   push:
     branches: [master]
