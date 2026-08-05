@@ -1,0 +1,26 @@
+{{- if .Values.autoscaling.enabled }}
+# Requires minikube's `metrics-server` addon (see scripts/start.sh) - without it this shows
+# <unknown> for current CPU utilization forever and never actually scales. Real gotcha, not
+# hypothetical - check `kubectl top pods` works before assuming this is broken.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "claude-full-learning.fullname" . }}
+  namespace: {{ include "claude-full-learning.namespace" . }}
+  labels:
+    {{- include "claude-full-learning.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "claude-full-learning.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

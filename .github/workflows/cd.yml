@@ -1,0 +1,78 @@
+name: CD
+
+# Publishes to GHCR. Does not deploy anywhere - GitHub-hosted runners have no network path to a
+# developer's local minikube, so the actual Helm install/rollout/health-check/smoke-test/rollback
+# sequence lives in scripts/deploy.sh, run by hand against whichever image tag this workflow
+# produced. See docs/architecture.md for the full picture of where the automation boundary is.
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  # Manual trigger, useful for re-testing this workflow without needing a real push/tag.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build and push to GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java & Maven cache
+        uses: ./.github/actions/setup-java-maven
+
+      # Belt-and-suspenders: a v* tag can point at any commit, not just one that went through a
+      # reviewed PR (ci.yml only runs on push/PR to master). Branch protection on master already
+      # covers the push-to-master trigger; this covers the tag-push trigger specifically.
+      - name: Verify before publishing
+        run: ./mvnw -B verify
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Lowercases github.repository automatically - stays correct even if the repo is ever
+          # renamed or forked, no hardcoded owner/name here.
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=long
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        env:
+          # Same fix as ci.yml's docker-build job: the action's auto-uploaded *.dockerbuild
+          # build-record artifact isn't consumed anywhere and previously broke a downstream
+          # artifact-download step in ci.yml (run 30835363318) - don't reintroduce that here.
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Reuses the same GitHub Actions cache layers ci.yml's docker-build job just populated
+          # on this commit, so re-running the build here is close to a cache-hit no-op rather than
+          # a full rebuild.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

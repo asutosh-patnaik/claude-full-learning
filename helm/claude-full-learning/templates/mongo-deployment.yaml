@@ -1,0 +1,31 @@
+{{- if .Values.mongodb.enabled }}
+# Unauthenticated, no PersistentVolumeClaim - data is lost on pod restart. Deliberately mirrors
+# k8s/mongo.yaml's existing non-goal rather than pulling in a Bitnami subchart: a real deployment
+# needs auth + a PVC, left out here to keep this demo self-contained, same as k8s/'s plain path.
+# Set mongodb.enabled: false and config.mongoUri to point at an external Mongo instead.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "claude-full-learning.fullname" . }}-mongo
+  namespace: {{ include "claude-full-learning.namespace" . }}
+  labels:
+    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "claude-full-learning.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mongo
+  template:
+    metadata:
+      labels:
+        {{- include "claude-full-learning.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: {{ .Values.mongodb.image }}
+          ports:
+            - containerPort: 27017
+{{- end }}

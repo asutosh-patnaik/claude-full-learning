@@ -1,0 +1,262 @@
+name: CI
+
+# CI only. No deployment logic lives here: no Kubernetes apply, no image push.
+# That's cd.yml's job (publishes to GHCR) plus scripts/deploy.sh (the actual
+# Helm install against local minikube - GitHub-hosted runners can't reach it,
+# see docs/architecture.md) - both pick up where docker-build/publish-artifacts
+# below leave off.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# A second push to the same branch/PR cancels the still-running CI for the
+# previous push instead of letting both finish - avoids burning runner time
+# and avoids two runs racing to report status on the same PR.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Stage 1 (checkout/env) + Stage 2 (build): every job below repeats its own
+  # checkout/setup-java, since each job gets a fresh runner with no shared
+  # filesystem - "needs" only orders jobs, it doesn't carry disk state. Maven
+  # dependency caching (not compiled output) is what actually gets reused
+  # across jobs, via the composite action's cache: maven.
+  build:
+    name: Build & format check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java & Maven cache
+        uses: ./.github/actions/setup-java-maven
+
+      - name: Compile
+        run: ./mvnw -B clean compile
+
+      - name: Check formatting (Spotless)
+        # Gentle ruleset (whitespace/imports/indent - see pom.xml comment), run
+        # as its own step so a formatting failure is visually distinct in the
+        # log from a compile failure, per "fail immediately" for this stage.
+        run: ./mvnw -B spotless:check
+
+  # Stage 3: fast, Docker-free feedback. *IntegrationTest classes need a real
+  # MongoDB via Testcontainers and are deliberately excluded here; they run in
+  # the integration-tests job below. See CLAUDE.md "Tests" for the naming
+  # convention this filter relies on.
+  unit-tests:
+    name: Unit tests
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java & Maven cache
+        uses: ./.github/actions/setup-java-maven
+
+      - name: Run unit tests
+        run: ./mvnw -B test -Dtest='!*IntegrationTest' -DfailIfNoTests=false
+
+      - name: Publish unit test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Unit test results
+          path: target/surefire-reports/*.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: target/surefire-reports/
+          retention-days: 14
+
+  # Stage 4: the full suite, plus the JaCoCo coverage gate.
+  #
+  # This project has no Surefire/Failsafe split at the Maven level (see
+  # CLAUDE.md "Tests" - unit and integration tests both run under Surefire in
+  # the `test` phase; there's no separate `*IT.java` + failsafe wiring). That
+  # means `mvn verify` is the only command that reproduces the documented
+  # 96.5% line / 87.5% branch coverage baseline exactly. Filtering this job
+  # down to only *IntegrationTest classes (mirroring the unit-tests job)
+  # would make the coverage gate below evaluate partial coverage and pass or
+  # fail for the wrong reason - so this stage intentionally re-runs the unit
+  # tests too, as part of the one real `verify` the project's Stop hook also
+  # runs locally.
+  #
+  # No `services:` block for MongoDB: Testcontainers starts and tears down
+  # its own MongoDB container per test class directly against the runner's
+  # already-present Docker daemon - ubuntu-latest ships Docker preinstalled,
+  # nothing extra to configure for isolation here.
+  integration-tests:
+    name: Integration tests & coverage gate
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java & Maven cache
+        uses: ./.github/actions/setup-java-maven
+
+      - name: Run full test suite and coverage gate
+        run: ./mvnw -B verify
+
+      - name: Publish integration test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Integration test results
+          path: target/surefire-reports/*IntegrationTest.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: target/surefire-reports/
+          retention-days: 14
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: target/site/jacoco/
+          retention-days: 14
+
+  # Stage 5: package the deployable jar. Tests are skipped here deliberately -
+  # they already ran (and gated the build) in the two jobs above; re-running
+  # them a third time would just burn runner time for the same answer. This
+  # mirrors the Dockerfile's own `-DskipTests package` for the same reason.
+  packaging:
+    name: Package application
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java & Maven cache
+        uses: ./.github/actions/setup-java-maven
+
+      - name: Package jar
+        run: ./mvnw -B -DskipTests package
+
+      - name: Write build metadata
+        run: |
+          cat > target/build-info.json <<EOF
+          {
+            "gitSha": "${{ github.sha }}",
+            "gitRef": "${{ github.ref_name }}",
+            "workflowRunId": "${{ github.run_id }}",
+            "workflowRunNumber": "${{ github.run_number }}",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Upload jar and build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-jar
+          path: |
+            target/*.jar
+            target/build-info.json
+          retention-days: 14
+
+  # Stage 6: build the Docker image. Not pushed anywhere - `push: false` -
+  # since ECR/registry publishing is explicitly out of scope until CD.
+  # Immutable tag = the full commit SHA (docker/metadata-action's
+  # type=sha,format=long); a floating branch tag is added alongside purely
+  # for local convenience, never relied on for identity.
+  docker-build:
+    name: Build Docker image
+    needs: packaging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Derive image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: claude-full-learning
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+
+      - name: Build image (not pushed)
+        uses: docker/build-push-action@v6
+        env:
+          # The action auto-uploads a `*.dockerbuild` build-record artifact for
+          # Docker Desktop import. We don't consume it, and the publish-artifacts
+          # job downloads every artifact in the run - the build-record's format
+          # made it fail actions/download-artifact there (see run 30835363318).
+          # We already write our own docker-image-metadata.json below, so just
+          # stop the record from being generated in the first place.
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # GitHub Actions cache backend: reuses Docker layers (notably the
+          # `dependency:go-offline` layer) across runs without a registry.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Write image metadata
+        run: |
+          docker image inspect "claude-full-learning:sha-${{ github.sha }}" \
+            --format '{{json .}}' > docker-image-metadata.json
+
+      - name: Upload Docker image metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-metadata
+          path: docker-image-metadata.json
+          retention-days: 14
+
+  # Stage 7: consolidate everything the jobs above uploaded separately into
+  # one bundle, so a future CD workflow can fetch a single artifact (keyed on
+  # this run's github.run_id) instead of knowing every individual job's
+  # artifact name.
+  publish-artifacts:
+    name: Publish combined build output
+    needs: docker-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all job artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ci-artifacts
+
+      - name: Upload combined artifact bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-build-output
+          path: ci-artifacts/
+          retention-days: 14

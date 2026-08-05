@@ -1,0 +1,17 @@
+{{- if .Values.grafanaDashboard.enabled }}
+# The `grafana_dashboard: "1"` label + kube-prometheus-stack's bundled Grafana sidecar
+# (sidecar.dashboards.searchNamespace: ALL is that chart's current default) is what picks this up
+# automatically - no manual import needed. Requires scripts/observability.sh to have installed
+# kube-prometheus-stack first.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "claude-full-learning.fullname" . }}-dashboard
+  namespace: {{ include "claude-full-learning.namespace" . }}
+  labels:
+    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  claude-full-learning.json: |
+{{ .Files.Get "dashboards/claude-full-learning.json" | indent 4 }}
+{{- end }}

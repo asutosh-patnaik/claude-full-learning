@@ -1,0 +1,28 @@
+{{- if .Values.ingress.enabled }}
+# Requires minikube's `ingress` addon (see scripts/start.sh) and, for host-based routing, an
+# /etc/hosts entry pointing .Values.ingress.host at `minikube ip` (see docs/setup.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "claude-full-learning.fullname" . }}
+  namespace: {{ include "claude-full-learning.namespace" . }}
+  labels:
+    {{- include "claude-full-learning.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "claude-full-learning.fullname" . }}
+                port:
+                  name: http
+{{- end }}

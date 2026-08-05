@@ -37,7 +37,12 @@ public class SecurityConfig {
                         // /error must be reachable so Boot's container-level error-page forward
                         // (triggered whenever a permitAll endpoint like /login or /register sets
                         // an error status) isn't itself blocked and re-reported as a bare 403.
-                        .requestMatchers("/login", "/register", "/error").permitAll()
+                        // /actuator/health(/**) and /actuator/prometheus are unauthenticated on
+                        // purpose - kubelet probes and Prometheus scraping can't present a JWT.
+                        // Listed explicitly rather than a blanket /actuator/** so a future actuator
+                        // endpoint addition doesn't silently become unauthenticated by wildcard.
+                        .requestMatchers("/login", "/register", "/error",
+                                "/actuator/health", "/actuator/health/**", "/actuator/prometheus").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

@@ -1,0 +1,15 @@
+# Dev overlay: single replica, Ingress on for exercising host-based routing locally, verbose logs.
+namespace:
+  name: claude-full-learning-dev
+
+replicaCount: 1
+
+ingress:
+  enabled: true
+  host: claude-full-learning.dev.local
+
+config:
+  logLevel: DEBUG
+
+autoscaling:
+  enabled: false
