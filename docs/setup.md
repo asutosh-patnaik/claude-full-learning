@@ -48,6 +48,11 @@ deploys and runs fine without it; you just won't get metrics/dashboards/log aggr
 this once per cluster. See [deployment.md](deployment.md) for how to then turn on scraping/dashboard
 for the app itself.
 
+Stop it later with `./scripts/observability.sh --stop` (prompts for confirmation; `--yes` to skip).
+This is deliberately not part of `scripts/destroy.sh` - see that script's own comments for why. Note
+re-installing generates a **fresh** Grafana admin password each time (Helm doesn't remember the old
+one), so re-fetch it (see "Accessing the dashboards" below) after any stop-then-reinstall cycle.
+
 ### Accessing the dashboards
 
 **Kubernetes dashboard** (minikube's built-in `dashboard` addon, enabled by `start.sh`):
