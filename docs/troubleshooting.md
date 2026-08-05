@@ -127,6 +127,33 @@ doesn't exist but `kubectl get all -n <namespace>` shows its resources still run
 state is fine - Helm's own bookkeeping got confused. Fix: `kubectl delete namespace <namespace>` and
 reinstall fresh, rather than trying to repair Helm's release secrets by hand.
 
+## A namespace `kubectl delete`d with `--wait=false` reappears healthy, then later vanishes on its own
+
+If you `kubectl delete namespace <ns> --wait=false` on a namespace containing `kube-prometheus-stack`
+resources (the `monitoring` namespace, if you ever tear it down by hand instead of
+`scripts/observability.sh --stop`), the delete can stay stuck in `Terminating` for a long time -
+Prometheus/Alertmanager are CustomResources with finalizers the operator needs to process before the
+namespace can actually finish deleting, and if the operator pod itself gets deleted first (as part of
+the same namespace teardown), those finalizers may never clear on their own.
+
+The confusing part: Kubernetes still lets you create new resources in a namespace that's
+`Terminating` for a while before its final garbage-collection sweep runs. A `helm install
+--create-namespace` targeting that same namespace name doesn't create a fresh namespace - it reuses
+the still-terminating one - so the install can appear to succeed, with genuinely healthy pods, for
+minutes or longer, before everything in it (the new install included) disappears the moment the
+stuck termination finally completes. This was observed for real: a `monitoring` namespace deleted
+with `--wait=false`, reinstalled and confirmed healthy in a later session, then found completely gone
+(not stuck, fully removed) after an unrelated `minikube stop`/`minikube start` cycle - the restart
+most likely nudged the controller manager into finishing the minutes-old stuck teardown.
+
+Check with `kubectl get namespace <ns> -o jsonpath='{.status.phase}'` - if it prints `Terminating`
+when you expected `Active`, that's this. Fix: let it finish (`kubectl get ns <ns> -w`), or force it
+past stuck finalizers on the CRs themselves (`kubectl get prometheuses,alertmanagers -n <ns>`, then
+`kubectl patch <resource> -n <ns> -p '{"metadata":{"finalizers":[]}}' --type=merge` on anything stuck)
+rather than on the namespace object directly. Better: avoid this class of problem entirely by using
+`scripts/observability.sh --stop` (`helm uninstall`, no namespace deletion at all) instead of
+`kubectl delete namespace` by hand.
+
 ## Resources land in a different namespace than `-n` specified
 
 Each `values-<env>.yaml` sets its own `namespace.name` (e.g. `claude-full-learning-dev`), and the

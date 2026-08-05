@@ -36,6 +36,15 @@ Starts minikube (no-op if already running) and enables the `ingress` and `metric
 both required by the Helm chart (`Ingress` resources need the former; `HorizontalPodAutoscaler`
 needs the latter or it shows `<unknown>` forever). Safe to re-run any time.
 
+Stop it later with `./scripts/start.sh --stop` (`minikube stop` - pauses the cluster, preserves all
+its data, fast-resumes with a plain re-run of this script). This is **not**
+`scripts/destroy.sh --wipe-cluster`, which permanently destroys the cluster and everything on it
+(`minikube delete`); `--stop` here needs no confirmation because it's fully reversible. Stopping also
+stops whatever's deployed on the cluster (the app, the observability stack) along with it - avoid
+`kubectl delete namespace` on `monitoring` by hand instead of `scripts/observability.sh --stop` if
+you want to skip a real, previously-hit gotcha where that can leave the namespace silently stuck
+`Terminating` for a while (see [troubleshooting.md](troubleshooting.md)).
+
 ## Optional: observability stack
 
 ```bash
