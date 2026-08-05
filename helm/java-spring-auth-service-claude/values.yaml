@@ -1,17 +1,17 @@
-# Default values for claude-full-learning. See values-dev.yaml / values-test.yaml /
+# Default values for java-spring-auth-service-claude. See values-dev.yaml / values-test.yaml /
 # values-production.yaml for the (small, deliberate) per-environment overlays, and
 # values-secrets.yaml.example for the untracked secrets overlay every install also needs.
 
 namespace:
   create: true
-  name: claude-full-learning
+  name: java-spring-auth-service-claude
 
 fullnameOverride: ""
 
 replicaCount: 1
 
 image:
-  repository: ghcr.io/asutosh-patnaik/claude-full-learning
+  repository: ghcr.io/asutosh-patnaik/java-spring-auth-service-claude
   tag: latest
   # IfNotPresent works for both the GHCR-pull path (deploy.sh --source ghcr) and the local
   # build+`minikube image load` path (deploy.sh --source local, mirroring k8s/app.yaml's flow) -
@@ -32,7 +32,7 @@ service:
 ingress:
   enabled: false
   className: nginx
-  host: claude-full-learning.local
+  host: java-spring-auth-service-claude.local
   annotations: {}
 
 resources:

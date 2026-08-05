@@ -6,21 +6,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "claude-full-learning.fullname" . }}-mongo
-  namespace: {{ include "claude-full-learning.namespace" . }}
+  name: {{ include "java-spring-auth-service-claude.fullname" . }}-mongo
+  namespace: {{ include "java-spring-auth-service-claude.namespace" . }}
   labels:
-    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    {{- include "java-spring-auth-service-claude.labels" . | nindent 4 }}
     app.kubernetes.io/component: mongo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "claude-full-learning.selectorLabels" . | nindent 6 }}
+      {{- include "java-spring-auth-service-claude.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: mongo
   template:
     metadata:
       labels:
-        {{- include "claude-full-learning.selectorLabels" . | nindent 8 }}
+        {{- include "java-spring-auth-service-claude.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: mongo
     spec:
       containers:

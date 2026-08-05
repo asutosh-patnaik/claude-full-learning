@@ -1,13 +1,13 @@
 # Test overlay: 2 replicas so the Service's label selector actually load-balances across pods
 # (something dev's replicaCount: 1 can't demonstrate at all).
 namespace:
-  name: claude-full-learning-test
+  name: java-spring-auth-service-claude-test
 
 replicaCount: 2
 
 ingress:
   enabled: true
-  host: claude-full-learning.test.local
+  host: java-spring-auth-service-claude.test.local
 
 config:
   logLevel: INFO

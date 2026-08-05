@@ -4,10 +4,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "claude-full-learning.fullname" . }}
-  namespace: {{ include "claude-full-learning.namespace" . }}
+  name: {{ include "java-spring-auth-service-claude.fullname" . }}
+  namespace: {{ include "java-spring-auth-service-claude.namespace" . }}
   labels:
-    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    {{- include "java-spring-auth-service-claude.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -22,7 +22,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "claude-full-learning.fullname" . }}
+                name: {{ include "java-spring-auth-service-claude.fullname" . }}
                 port:
                   name: http
 {{- end }}

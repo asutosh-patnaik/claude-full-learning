@@ -5,15 +5,15 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "claude-full-learning.fullname" . }}
-  namespace: {{ include "claude-full-learning.namespace" . }}
+  name: {{ include "java-spring-auth-service-claude.fullname" . }}
+  namespace: {{ include "java-spring-auth-service-claude.namespace" . }}
   labels:
-    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    {{- include "java-spring-auth-service-claude.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "claude-full-learning.fullname" . }}
+    name: {{ include "java-spring-auth-service-claude.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

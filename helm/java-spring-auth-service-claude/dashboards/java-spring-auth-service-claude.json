@@ -1,6 +1,6 @@
 {
-  "title": "claude-full-learning",
-  "uid": "claude-full-learning",
+  "title": "java-spring-auth-service-claude",
+  "uid": "java-spring-auth-service-claude",
   "schemaVersion": 39,
   "version": 1,
   "editable": true,
@@ -18,8 +18,8 @@
       {
         "name": "namespace",
         "type": "custom",
-        "query": "claude-full-learning-dev,claude-full-learning-test,claude-full-learning-production",
-        "current": { "text": "claude-full-learning-dev", "value": "claude-full-learning-dev" }
+        "query": "java-spring-auth-service-claude-dev,java-spring-auth-service-claude-test,java-spring-auth-service-claude-production",
+        "current": { "text": "java-spring-auth-service-claude-dev", "value": "java-spring-auth-service-claude-dev" }
       }
     ]
   },
@@ -132,7 +132,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "targets": [
         {
-          "expr": "kube_deployment_status_replicas_ready{namespace=\"$namespace\", deployment=\"claude-full-learning\"}",
+          "expr": "kube_deployment_status_replicas_ready{namespace=\"$namespace\", deployment=\"java-spring-auth-service-claude\"}",
           "legendFormat": "ready replicas"
         }
       ]

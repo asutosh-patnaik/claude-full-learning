@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-time-per-cluster local setup: starts minikube and enables the addons the Helm chart depends
 # on (ingress for Ingress resources, metrics-server for HPA - without it HPA shows <unknown>
-# forever, see helm/claude-full-learning/templates/hpa.yaml). Fully idempotent, safe to re-run.
+# forever, see helm/java-spring-auth-service-claude/templates/hpa.yaml). Fully idempotent, safe to re-run.
 # --stop pauses minikube (not destroys it - see scripts/destroy.sh --wipe-cluster for that).
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

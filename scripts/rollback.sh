@@ -16,7 +16,7 @@ Usage:
   $(basename "$0") <dev|test|production> <revision>       Roll back to that revision and verify health.
 
 What a rollback actually reverts: the Deployment's pod template (image, env, resources) - NOT
-Mongo's data, which has no PersistentVolumeClaim regardless (see helm/claude-full-learning/
+Mongo's data, which has no PersistentVolumeClaim regardless (see helm/java-spring-auth-service-claude/
 templates/mongo-deployment.yaml) and is unaffected by any Helm operation either way.
 EOF
 }
@@ -47,7 +47,7 @@ cleanup() { [[ -n "$PORT_FORWARD_PID" ]] && kill "$PORT_FORWARD_PID" 2>/dev/null
 trap cleanup EXIT
 
 kubectl port-forward -n "$NAMESPACE" "svc/${RELEASE_NAME}" "${LOCAL_PORT}:${SERVICE_PORT}" \
-  > /tmp/claude-full-learning-rollback-portforward.log 2>&1 &
+  > /tmp/java-spring-auth-service-claude-rollback-portforward.log 2>&1 &
 PORT_FORWARD_PID=$!
 sleep 3
 

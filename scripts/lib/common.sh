@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Shared by every scripts/*.sh - namespace naming, logging, and the one env-name validation rule,
-# so they can't silently drift between scripts (e.g. one script deriving "claude-full-learning-dev"
-# and another "dev-claude-full-learning").
+# so they can't silently drift between scripts (e.g. one script deriving "java-spring-auth-service-claude-dev"
+# and another "dev-java-spring-auth-service-claude").
 set -euo pipefail
 
-RELEASE_NAME="claude-full-learning"
+RELEASE_NAME="java-spring-auth-service-claude"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CHART_DIR="${REPO_ROOT}/helm/claude-full-learning"
+CHART_DIR="${REPO_ROOT}/helm/java-spring-auth-service-claude"
 
 log_info()  { echo "[INFO]  $*"; }
 log_warn()  { echo "[WARN]  $*" >&2; }
 log_error() { echo "[ERROR] $*" >&2; }
 
-# Every environment this chart supports - see helm/claude-full-learning/values-<env>.yaml.
+# Every environment this chart supports - see helm/java-spring-auth-service-claude/values-<env>.yaml.
 valid_environment() {
   case "$1" in
     dev|test|production) return 0 ;;

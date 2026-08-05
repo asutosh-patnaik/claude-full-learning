@@ -1,25 +1,25 @@
 # imagePullPolicy: Never — this expects the image to already be loaded into the cluster's
-# local image cache via `minikube image load claude-full-learning:latest` (see README), not
+# local image cache via `minikube image load java-spring-auth-service-claude:latest` (see README), not
 # pulled from a registry. TCP-socket probes rather than an HTTP health endpoint: the app has
 # no /actuator/health (no Spring Boot Actuator dependency), and every real HTTP route either
 # requires POST or a valid JWT, so a plain GET health check would misreport as unhealthy.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: claude-full-learning
+  name: java-spring-auth-service-claude
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: claude-full-learning
+      app: java-spring-auth-service-claude
   template:
     metadata:
       labels:
-        app: claude-full-learning
+        app: java-spring-auth-service-claude
     spec:
       containers:
         - name: app
-          image: claude-full-learning:latest
+          image: java-spring-auth-service-claude:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 8080
@@ -65,11 +65,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: claude-full-learning
+  name: java-spring-auth-service-claude
 spec:
   type: NodePort
   selector:
-    app: claude-full-learning
+    app: java-spring-auth-service-claude
   ports:
     - port: 8080
       targetPort: 8080

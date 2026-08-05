@@ -12,7 +12,7 @@
     </parent>
 
     <groupId>org.example</groupId>
-    <artifactId>claude-full-learning</artifactId>
+    <artifactId>java-spring-auth-service-claude</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>

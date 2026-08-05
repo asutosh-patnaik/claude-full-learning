@@ -1,0 +1,17 @@
+{{- if .Values.mongodb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "java-spring-auth-service-claude.fullname" . }}-mongo
+  namespace: {{ include "java-spring-auth-service-claude.namespace" . }}
+  labels:
+    {{- include "java-spring-auth-service-claude.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongo
+spec:
+  selector:
+    {{- include "java-spring-auth-service-claude.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mongo
+  ports:
+    - port: 27017
+      targetPort: 27017
+{{- end }}

@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "claude-full-learning.fullname" . }}
-  namespace: {{ include "claude-full-learning.namespace" . }}
+  name: {{ include "java-spring-auth-service-claude.fullname" . }}
+  namespace: {{ include "java-spring-auth-service-claude.namespace" . }}
   labels:
-    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    {{- include "java-spring-auth-service-claude.labels" . | nindent 4 }}
     app.kubernetes.io/component: app
 spec:
   {{- if not .Values.autoscaling.enabled }}
@@ -12,15 +12,15 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "claude-full-learning.selectorLabels" . | nindent 6 }}
+      {{- include "java-spring-auth-service-claude.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: app
   template:
     metadata:
       labels:
-        {{- include "claude-full-learning.selectorLabels" . | nindent 8 }}
+        {{- include "java-spring-auth-service-claude.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: app
     spec:
-      serviceAccountName: {{ include "claude-full-learning.serviceAccountName" . }}
+      serviceAccountName: {{ include "java-spring-auth-service-claude.serviceAccountName" . }}
       {{- if .Values.image.pullSecretName }}
       imagePullSecrets:
         - name: {{ .Values.image.pullSecretName }}
@@ -34,32 +34,32 @@ spec:
               containerPort: 8080
           envFrom:
             - configMapRef:
-                name: {{ include "claude-full-learning.fullname" . }}-config
+                name: {{ include "java-spring-auth-service-claude.fullname" . }}-config
           env:
             - name: JWT_ACTIVE_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  name: {{ include "java-spring-auth-service-claude.fullname" . }}-secrets
                   key: jwt-active-key-id
             - name: JWT_KEYS_0_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  name: {{ include "java-spring-auth-service-claude.fullname" . }}-secrets
                   key: jwt-key-id
             - name: JWT_KEYS_0_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  name: {{ include "java-spring-auth-service-claude.fullname" . }}-secrets
                   key: jwt-private-key
             - name: JWT_KEYS_0_PUBLIC_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  name: {{ include "java-spring-auth-service-claude.fullname" . }}-secrets
                   key: jwt-public-key
             - name: JWT_EXPIRATION_MS
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "claude-full-learning.fullname" . }}-secrets
+                  name: {{ include "java-spring-auth-service-claude.fullname" . }}-secrets
                   key: jwt-expiration-ms
           # Real HTTP health semantics via Actuator's k8s probe groups, replacing k8s/app.yaml's
           # TCP-socket-only probes (which could only tell "is the port open", not "is the app

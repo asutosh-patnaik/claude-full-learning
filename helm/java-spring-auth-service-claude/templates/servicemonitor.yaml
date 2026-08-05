@@ -6,15 +6,15 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "claude-full-learning.fullname" . }}
-  namespace: {{ include "claude-full-learning.namespace" . }}
+  name: {{ include "java-spring-auth-service-claude.fullname" . }}
+  namespace: {{ include "java-spring-auth-service-claude.namespace" . }}
   labels:
-    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    {{- include "java-spring-auth-service-claude.labels" . | nindent 4 }}
     release: {{ .Values.serviceMonitor.prometheusRelease }}
 spec:
   selector:
     matchLabels:
-      {{- include "claude-full-learning.selectorLabels" . | nindent 6 }}
+      {{- include "java-spring-auth-service-claude.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: app
   endpoints:
     - port: http

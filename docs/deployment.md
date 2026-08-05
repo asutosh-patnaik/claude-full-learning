@@ -10,23 +10,23 @@ Assumes [setup.md](setup.md)'s prerequisites and `./scripts/start.sh` have alrea
 
 In order:
 
-1. **Validates** the environment argument and that `helm/claude-full-learning/values-<env>.secrets.yaml`
+1. **Validates** the environment argument and that `helm/java-spring-auth-service-claude/values-<env>.secrets.yaml`
    exists (see [setup.md](setup.md)'s Secrets section - it errors out immediately with the exact copy
    command if it's missing, rather than deploying with empty/broken secrets).
 2. **Resolves the image**:
-   - `--source ghcr` (default): the cluster pulls `ghcr.io/asutosh-patnaik/claude-full-learning:<tag>`
+   - `--source ghcr` (default): the cluster pulls `ghcr.io/asutosh-patnaik/java-spring-auth-service-claude:<tag>`
      directly. If `GHCR_PULL_PAT` and `GHCR_PULL_USERNAME` are set in your shell, an imagePullSecret
      is created/updated automatically for a private package (see setup.md's GHCR section) - the
      credential is read only from the environment, never written to a file or passed as a literal
      `--set` argument (which would land in shell history).
-   - `--source local`: builds `claude-full-learning:<tag>` from this checkout and `minikube image
+   - `--source local`: builds `java-spring-auth-service-claude:<tag>` from this checkout and `minikube image
      load`s it - mirrors `k8s/app.yaml`'s original flow, for testing an unpushed change.
 3. **`helm upgrade --install`** with `values.yaml` (defaults) + `values-<env>.yaml` (environment
    overlay) + `values-<env>.secrets.yaml` (untracked secrets), `--wait --timeout 5m`.
 4. **`kubectl rollout status`** as an explicit, clearly-logged check alongside Helm's own `--wait`.
 5. **Health check**: a `kubectl port-forward` to the Service (not Ingress - driver-independent,
    works identically on every OS/minikube driver) plus a retry loop against `/actuator/health`.
-6. **Smoke tests**: the existing `postman/claude-full-learning.postman_collection.json` via Newman,
+6. **Smoke tests**: the existing `postman/java-spring-auth-service-claude.postman_collection.json` via Newman,
    against that same port-forward. Each run registers a fresh user (the collection's username is
    `Date.now()`-based - see CLAUDE.md's Postman gotcha) - fine for a smoke test, just not idempotent
    against one fixed account.
@@ -50,7 +50,7 @@ Later files win. `deploy.sh` passes all three via `-f`, in that order, plus `--s
 Worked example, dev:
 
 ```bash
-cp helm/claude-full-learning/values-secrets.yaml.example helm/claude-full-learning/values-dev.secrets.yaml
+cp helm/java-spring-auth-service-claude/values-secrets.yaml.example helm/java-spring-auth-service-claude/values-dev.secrets.yaml
 # fill in real values in values-dev.secrets.yaml
 ./scripts/deploy.sh dev --source local
 ```
@@ -58,7 +58,7 @@ cp helm/claude-full-learning/values-secrets.yaml.example helm/claude-full-learni
 Worked example, deploying a specific GHCR-published tag to test:
 
 ```bash
-cp helm/claude-full-learning/values-secrets.yaml.example helm/claude-full-learning/values-test.secrets.yaml
+cp helm/java-spring-auth-service-claude/values-secrets.yaml.example helm/java-spring-auth-service-claude/values-test.secrets.yaml
 ./scripts/deploy.sh test --tag sha-<commit-sha-from-a-cd.yml-run>
 ```
 
@@ -67,7 +67,7 @@ cp helm/claude-full-learning/values-secrets.yaml.example helm/claude-full-learni
 GHCR packages default to **private**, even on a public repo, until you change that once in the
 GitHub UI. Until you do (or if you'd rather keep it private), `--source ghcr` needs the
 `GHCR_PULL_PAT`/`GHCR_PULL_USERNAME` pair from [setup.md](setup.md). To make it public instead: repo
-→ Packages tab → the `claude-full-learning` package → Package settings → Danger Zone → Change
+→ Packages tab → the `java-spring-auth-service-claude` package → Package settings → Danger Zone → Change
 visibility. This can't be scripted without extra token permissions, so it's a deliberate one-time
 manual step, not something `deploy.sh` does for you.
 
@@ -80,16 +80,16 @@ Once `scripts/observability.sh` has installed the monitoring stack:
 ./scripts/deploy.sh dev --source ghcr \
   --tag <tag>
 # then, or combined into the same run by editing values-dev.yaml:
-helm upgrade claude-full-learning helm/claude-full-learning \
-  -f helm/claude-full-learning/values-dev.yaml -f helm/claude-full-learning/values-dev.secrets.yaml \
+helm upgrade java-spring-auth-service-claude helm/java-spring-auth-service-claude \
+  -f helm/java-spring-auth-service-claude/values-dev.yaml -f helm/java-spring-auth-service-claude/values-dev.secrets.yaml \
   --set serviceMonitor.enabled=true --set grafanaDashboard.enabled=true \
-  -n claude-full-learning-dev
+  -n java-spring-auth-service-claude-dev
 ```
 
 Verify: `kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090` and
-check the Targets page for `serviceMonitor/claude-full-learning-dev/claude-full-learning/0` showing
+check the Targets page for `serviceMonitor/java-spring-auth-service-claude-dev/java-spring-auth-service-claude/0` showing
 `up`; `kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80` and look for a
-"claude-full-learning" dashboard (see [setup.md](setup.md)'s "Accessing the dashboards" section for
+"java-spring-auth-service-claude" dashboard (see [setup.md](setup.md)'s "Accessing the dashboards" section for
 the Grafana login and the Kubernetes dashboard too). If either doesn't show up, see
 [troubleshooting.md](troubleshooting.md) - both had real, non-obvious causes during development.
 

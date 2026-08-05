@@ -21,10 +21,10 @@ Usage: $(basename "$0") [--stop [--yes]]
 No args: installs kube-prometheus-stack (Prometheus + Grafana + Alertmanager) and Loki + Promtail
 into the 'monitoring' namespace. Idempotent (helm upgrade --install). Run once per cluster, after
 scripts/start.sh. Turn on scraping/dashboard for this app afterwards with:
-  helm upgrade --install claude-full-learning helm/claude-full-learning \\
-    -f helm/claude-full-learning/values-<env>.yaml -f helm/claude-full-learning/values-<env>.secrets.yaml \\
+  helm upgrade --install java-spring-auth-service-claude helm/java-spring-auth-service-claude \\
+    -f helm/java-spring-auth-service-claude/values-<env>.yaml -f helm/java-spring-auth-service-claude/values-<env>.secrets.yaml \\
     --set serviceMonitor.enabled=true --set grafanaDashboard.enabled=true \\
-    -n claude-full-learning-<env>
+    -n java-spring-auth-service-claude-<env>
 
 --stop [--yes]: uninstalls all three releases (monitoring, loki, promtail) from the 'monitoring'
 namespace - the observability stack only, not the app itself and not minikube. Leaves the namespace
@@ -107,4 +107,4 @@ helm upgrade --install promtail grafana/promtail \
 
 log_info "done. Grafana: kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80"
 log_info "Grafana admin password: kubectl get secret -n monitoring monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d"
-log_info "Loki is pre-wired as a Grafana datasource - use Explore, pick 'Loki', query e.g. {namespace=\"claude-full-learning-dev\"}"
+log_info "Loki is pre-wired as a Grafana datasource - use Explore, pick 'Loki', query e.g. {namespace=\"java-spring-auth-service-claude-dev\"}"

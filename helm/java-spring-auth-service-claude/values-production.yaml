@@ -3,13 +3,13 @@
 # mechanics, not an actual production deployment - see k8s/mongo.yaml's and this chart's own
 # mongo-deployment.yaml comments for what's deliberately still out of scope (Mongo auth/PVC).
 namespace:
-  name: claude-full-learning-production
+  name: java-spring-auth-service-claude-production
 
 replicaCount: 2
 
 ingress:
   enabled: true
-  host: claude-full-learning.local
+  host: java-spring-auth-service-claude.local
 
 resources:
   requests:

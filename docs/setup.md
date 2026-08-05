@@ -85,13 +85,13 @@ Then browse to `http://localhost:3000`. Username is `admin`; get the generated p
 kubectl get secret -n monitoring monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d
 ```
 
-The "claude-full-learning" dashboard only shows real data once the app's been deployed with
+The "java-spring-auth-service-claude" dashboard only shows real data once the app's been deployed with
 `--set serviceMonitor.enabled=true --set grafanaDashboard.enabled=true` - see
 [deployment.md](deployment.md)'s observability section.
 
 **App logs, via Grafana → Explore** (no extra setup - `observability.sh` pre-wires Loki as a Grafana
 datasource): open Grafana as above, go to **Explore**, pick the **Loki** datasource, and query e.g.
-`{namespace="claude-full-learning-dev"}`. This is the normal way to look at logs; direct Loki API
+`{namespace="java-spring-auth-service-claude-dev"}`. This is the normal way to look at logs; direct Loki API
 access below is mainly for debugging or scripting.
 
 **Prometheus** and **Loki**, directly (mainly for debugging - Grafana is the normal way to look at
@@ -109,7 +109,7 @@ Ingress isn't required for the deploy pipeline itself to work. It's there for ma
 the app by hostname. To use it:
 
 ```bash
-echo "$(minikube ip)  claude-full-learning.dev.local" | sudo tee -a /etc/hosts
+echo "$(minikube ip)  java-spring-auth-service-claude.dev.local" | sudo tee -a /etc/hosts
 ```
 
 (swap the host for whichever environment's `values-<env>.yaml` you're using). On some minikube
@@ -134,7 +134,7 @@ visibility), neither variable is needed.
 ## Secrets
 
 ```bash
-cp helm/claude-full-learning/values-secrets.yaml.example helm/claude-full-learning/values-dev.secrets.yaml
+cp helm/java-spring-auth-service-claude/values-secrets.yaml.example helm/java-spring-auth-service-claude/values-dev.secrets.yaml
 ```
 
 Fill in real RSA key material (the file itself documents the exact `openssl` recipe, same one

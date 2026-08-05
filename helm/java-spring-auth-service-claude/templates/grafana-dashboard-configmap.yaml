@@ -6,12 +6,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "claude-full-learning.fullname" . }}-dashboard
-  namespace: {{ include "claude-full-learning.namespace" . }}
+  name: {{ include "java-spring-auth-service-claude.fullname" . }}-dashboard
+  namespace: {{ include "java-spring-auth-service-claude.namespace" . }}
   labels:
-    {{- include "claude-full-learning.labels" . | nindent 4 }}
+    {{- include "java-spring-auth-service-claude.labels" . | nindent 4 }}
     grafana_dashboard: "1"
 data:
-  claude-full-learning.json: |
-{{ .Files.Get "dashboards/claude-full-learning.json" | indent 4 }}
+  java-spring-auth-service-claude.json: |
+{{ .Files.Get "dashboards/java-spring-auth-service-claude.json" | indent 4 }}
 {{- end }}

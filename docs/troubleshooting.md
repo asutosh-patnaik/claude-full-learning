@@ -12,7 +12,7 @@ configured. Either make the package public (see [deployment.md](deployment.md)'s
 imagePullSecret for you. Confirm with:
 
 ```bash
-kubectl describe pod -n claude-full-learning-<env> -l app.kubernetes.io/component=app
+kubectl describe pod -n java-spring-auth-service-claude-<env> -l app.kubernetes.io/component=app
 # look for: "pull access denied" or "unauthorized" in the Events section
 ```
 
@@ -20,11 +20,11 @@ kubectl describe pod -n claude-full-learning-<env> -l app.kubernetes.io/componen
 
 `metrics-server` addon isn't enabled. `scripts/start.sh` enables it, but if you started minikube some
 other way: `minikube addons enable metrics-server`, then confirm with `kubectl top pods -n
-claude-full-learning-<env>` - if that also fails, the addon isn't ready yet, give it a minute.
+java-spring-auth-service-claude-<env>` - if that also fails, the addon isn't ready yet, give it a minute.
 
 ## ServiceMonitor exists but Prometheus never shows the target
 
-Check `kubectl get servicemonitor claude-full-learning -n claude-full-learning-<env> -o yaml` and
+Check `kubectl get servicemonitor java-spring-auth-service-claude -n java-spring-auth-service-claude-<env> -o yaml` and
 compare its `spec.selector.matchLabels` against the app **Service's** `metadata.labels` (not the
 Deployment's, not the Pod's) - Prometheus's `role: endpoints` discovery relabels based on the
 Service's own labels copied onto the Endpoints object, not the Pod's labels directly. This project hit
@@ -34,7 +34,7 @@ the label never reached the Endpoints object and every target was silently dropp
 Fixed by adding the label to both places; if you add further component-style labels to the chart,
 make sure they're on both `metadata.labels` and `spec.selector`, not just one.
 
-To check yourself: `kubectl get endpoints claude-full-learning -n claude-full-learning-<env> -o yaml`
+To check yourself: `kubectl get endpoints java-spring-auth-service-claude -n java-spring-auth-service-claude-<env> -o yaml`
 and look for the label directly on that object. Also check Prometheus's own view:
 
 ```bash
@@ -50,11 +50,11 @@ mismatch, not a network/scrape-config problem.
 Check the sidecar actually picked it up:
 
 ```bash
-kubectl logs -n monitoring deployment/monitoring-grafana -c grafana-sc-dashboard --tail=50 | grep claude-full-learning
+kubectl logs -n monitoring deployment/monitoring-grafana -c grafana-sc-dashboard --tail=50 | grep java-spring-auth-service-claude
 ```
 
 If nothing shows up, confirm the ConfigMap has the label the sidecar watches for:
-`kubectl get configmap -n claude-full-learning-<env> -l grafana_dashboard=1`. The
+`kubectl get configmap -n java-spring-auth-service-claude-<env> -l grafana_dashboard=1`. The
 `kube-prometheus-stack` version this was built against defaults to
 `sidecar.dashboards.searchNamespace: ALL`, so cross-namespace discovery already works out of the box
 - if a future chart upgrade changes that default, you'd need
@@ -156,7 +156,7 @@ rather than on the namespace object directly. Better: avoid this class of proble
 
 ## Resources land in a different namespace than `-n` specified
 
-Each `values-<env>.yaml` sets its own `namespace.name` (e.g. `claude-full-learning-dev`), and the
+Each `values-<env>.yaml` sets its own `namespace.name` (e.g. `java-spring-auth-service-claude-dev`), and the
 chart's templates all resolve the target namespace from that value, not from `.Release.Namespace`.
 This means the values file's namespace always wins over whatever `-n`/`--namespace` you pass to
 `helm` directly - `scripts/deploy.sh` always keeps these in sync automatically by deriving both from
@@ -168,7 +168,7 @@ file's `namespace.name`, not an arbitrary one.
 Kubernetes Deployments can't have their label selector changed in place. If you're modifying
 `templates/_helpers.tpl`'s selector labels or `templates/deployment.yaml`'s `spec.selector`, a plain
 `helm upgrade` on an existing release will fail. Uninstall and reinstall for that one change:
-`helm uninstall claude-full-learning -n <namespace>` then `scripts/deploy.sh <env>` again.
+`helm uninstall java-spring-auth-service-claude -n <namespace>` then `scripts/deploy.sh <env>` again.
 
 ## Why the observability charts aren't what other Loki tutorials show
 
