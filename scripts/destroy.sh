@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# The only destructive script here - two independent, never-bundled flags, because "remove this
-# app's release" and "wipe the entire local cluster" are very different blast radii.
+# Two independent, never-bundled flags, because "remove this app's release" and "wipe the entire
+# local cluster" are very different blast radii. The observability stack (a third, unrelated
+# blast radius - platform-level, not per-app) is deliberately NOT handled here - it's
+# scripts/observability.sh --stop, since that script already owns installing it.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
@@ -16,6 +18,9 @@ Usage:
       Destroys the ENTIRE local minikube cluster (minikube delete) - every namespace, every
       release, anything else you have running on it. Requires typing the cluster context name
       back to confirm; there is no --yes shortcut for this one.
+
+To stop just the observability stack (Prometheus/Grafana/Loki/Promtail) without touching the app or
+the cluster, use scripts/observability.sh --stop instead - not handled here.
 
 No flags: prints this usage and exits non-zero - never guesses which destructive action you meant.
 EOF

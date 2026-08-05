@@ -16,19 +16,47 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0")
+Usage: $(basename "$0") [--stop [--yes]]
 
-Installs kube-prometheus-stack (Prometheus + Grafana + Alertmanager) and Loki + Promtail into the
-'monitoring' namespace. Idempotent (helm upgrade --install). Run once per cluster, after
+No args: installs kube-prometheus-stack (Prometheus + Grafana + Alertmanager) and Loki + Promtail
+into the 'monitoring' namespace. Idempotent (helm upgrade --install). Run once per cluster, after
 scripts/start.sh. Turn on scraping/dashboard for this app afterwards with:
   helm upgrade --install claude-full-learning helm/claude-full-learning \\
     -f helm/claude-full-learning/values-<env>.yaml -f helm/claude-full-learning/values-<env>.secrets.yaml \\
     --set serviceMonitor.enabled=true --set grafanaDashboard.enabled=true \\
     -n claude-full-learning-<env>
+
+--stop [--yes]: uninstalls all three releases (monitoring, loki, promtail) from the 'monitoring'
+namespace - the observability stack only, not the app itself and not minikube. Leaves the namespace
+in place (nothing else lives there); delete it yourself afterwards if you want it gone too
+(kubectl delete namespace monitoring). Prompts for confirmation unless --yes is passed. This is
+deliberately not part of scripts/destroy.sh - that script's whole design point is keeping "the app's
+release" and "the entire cluster" from ever sharing a flag, and the observability stack is a third,
+unrelated blast radius (platform-level, not per-app); the script that owns installing something
+should be the one that owns removing it too.
 EOF
 }
 
-[[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && { usage; exit 0; }
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ "${1:-}" == "--stop" ]]; then
+  AUTO_YES=false
+  [[ "${2:-}" == "--yes" ]] && AUTO_YES=true
+
+  if [[ "$AUTO_YES" != true ]]; then
+    read -r -p "Uninstall the observability stack (monitoring, loki, promtail) from namespace 'monitoring'? [y/N] " reply
+    [[ "$reply" =~ ^[Yy]$ ]] || { log_info "aborted, nothing changed."; exit 0; }
+  fi
+
+  log_info "uninstalling monitoring, loki, promtail from 'monitoring'..."
+  helm uninstall monitoring loki promtail -n monitoring
+  log_info "done. The 'monitoring' namespace itself is untouched - delete it too with:"
+  log_info "  kubectl delete namespace monitoring"
+  exit 0
+fi
 
 log_info "adding/updating Helm repos..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null
