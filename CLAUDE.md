@@ -22,7 +22,7 @@ limiter. Sessions can be revoked server-side (password change, block) despite us
 
 # Package an executable jar
 ./mvnw -DskipTests package
-java -jar target/claude-full-learning-1.0-SNAPSHOT.jar
+java -jar target/java-spring-auth-service-claude-1.0-SNAPSHOT.jar
 
 # Run all tests (unit + integration; integration tests need Docker running, for Testcontainers)
 ./mvnw test
@@ -226,7 +226,7 @@ This was deployed to a real local minikube cluster and verified end-to-end (regi
 confirming the RSA `kid` header and rate-limit `429` both work identically inside the cluster) before these
 manifests were checked in — not just written and assumed correct.
 
-**`postman/claude-full-learning.postman_collection.json`** — one gotcha worth not repeating: a Postman
+**`postman/java-spring-auth-service-claude.postman_collection.json`** — one gotcha worth not repeating: a Postman
 collection variable's stored default value containing a dynamic variable (e.g. `"alice-{{$randomInt}}"`)
 re-resolves to a *fresh* random value on every single reference to that variable, not once per collection
 run. Storing a "random username" this way silently produces a different username each time `{{username}}`
@@ -307,14 +307,14 @@ possible without registering a self-hosted runner (a real option, deliberately n
 this clean split for a persistent listener process with access to the local machine).
 
 **`.github/workflows/cd.yml`** — cloud, fully automatic. Builds and pushes to
-`ghcr.io/asutosh-patnaik/claude-full-learning` on push to `master` and on `v*` tags, using the built-in
+`ghcr.io/asutosh-patnaik/java-spring-auth-service-claude` on push to `master` and on `v*` tags, using the built-in
 `GITHUB_TOKEN` (no new secret). Immutable full-SHA tag always; semver tags only on `v*` tags; floating
 `latest` only from `master`. Re-runs its own Docker build rather than consuming `ci.yml`'s image (no clean
 way to hand a loaded image between separate workflow *runs*), reusing the same `type=gha` cache layer
 `ci.yml` just populated. Includes its own `mvnw verify` first, since a `v*` tag push can point at any
 commit, not just a reviewed/CI-passed one — `master` pushes are covered by branch protection instead.
 
-**`helm/claude-full-learning/`** — a Helm chart parallel to the plain `k8s/` manifests (kept exactly as-is,
+**`helm/java-spring-auth-service-claude/`** — a Helm chart parallel to the plain `k8s/` manifests (kept exactly as-is,
 untouched by this work). Deployment, Service, ConfigMap, Secret, Namespace, ServiceAccount, Ingress, HPA,
 an in-chart Mongo (same no-auth/no-PVC demo posture as `k8s/mongo.yaml`, deliberately not a Bitnami
 subchart — see the chart's own `mongo-deployment.yaml` comment), plus `values.yaml` defaults and
@@ -355,7 +355,7 @@ just an average. See `docs/troubleshooting.md` for the several non-obvious flags
 (`useTestSchema`, zeroed SimpleScalable replicas, disabled memcached sidecars, disabled multi-tenancy) and
 the real Service-labeling bug the ServiceMonitor work surfaced (fixed in `templates/service.yaml`).
 
-**Secrets** — real values never committed. `helm/claude-full-learning/values-<env>.secrets.yaml` (one per
+**Secrets** — real values never committed. `helm/java-spring-auth-service-claude/values-<env>.secrets.yaml` (one per
 environment) is gitignored (`helm/**/values-*.secrets.yaml`); `values-secrets.yaml.example` is the tracked
 template, cross-referencing `application.properties`'s existing RSA key-generation recipe rather than a
 new one. `templates/secret.yaml` fails the Helm render loudly if `secrets.jwtPrivateKey` is still empty,

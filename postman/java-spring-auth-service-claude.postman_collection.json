@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "claude-full-learning",
+    "name": "java-spring-auth-service-claude",
     "description": "Register/login/JWT auth API. Covers every scenario exercised manually during development: happy paths, validation/auth failures, session revocation, and rate limiting. See CLAUDE.md and README.md in the repo for the full design rationale.\n\nRun order matters within a folder (Register → Login → Users → Password change) since later requests reuse state (e.g. the token captured by Login). Each request has test assertions on status code and, where relevant, response shape.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

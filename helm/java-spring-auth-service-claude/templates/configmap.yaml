@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "java-spring-auth-service-claude.fullname" . }}-config
+  namespace: {{ include "java-spring-auth-service-claude.namespace" . }}
+  labels:
+    {{- include "java-spring-auth-service-claude.labels" . | nindent 4 }}
+data:
+  SPRING_DATA_MONGODB_URI: {{ include "java-spring-auth-service-claude.mongoUri" . | quote }}
+  LOGGING_LEVEL_ROOT: {{ .Values.config.logLevel | quote }}
+  RATELIMIT_CAPACITY: {{ .Values.config.rateLimitCapacity | quote }}
+  RATELIMIT_REFILL_SECONDS: {{ .Values.config.rateLimitRefillSeconds | quote }}

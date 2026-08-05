@@ -8,7 +8,7 @@ set -euo pipefail
 # run_smoke_tests <base_url>
 run_smoke_tests() {
   local base_url="$1"
-  local collection="${REPO_ROOT}/postman/claude-full-learning.postman_collection.json"
+  local collection="${REPO_ROOT}/postman/java-spring-auth-service-claude.postman_collection.json"
 
   if ! command -v npx >/dev/null 2>&1; then
     log_error "npx not found - Newman smoke tests require Node.js (see docs/setup.md)."

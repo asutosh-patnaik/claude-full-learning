@@ -1,7 +1,7 @@
 apiVersion: v2
-name: claude-full-learning
+name: java-spring-auth-service-claude
 description: >
-  Helm chart for the claude-full-learning JWT auth API. Parallel to the plain k8s/ manifests
+  Helm chart for the java-spring-auth-service-claude JWT auth API. Parallel to the plain k8s/ manifests
   (which are kept as-is, untouched) - this is the recommended path for anything beyond the
   original minimal demo: per-environment values, Ingress, HPA, and observability hooks that the
   plain manifests deliberately don't have.

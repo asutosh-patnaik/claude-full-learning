@@ -12,7 +12,7 @@ flowchart TB
         direction TB
         A[Developer pushes to master / pushes a v* tag] --> B["ci.yml: build, unit tests,\nintegration tests, coverage gate,\npackage, docker build (not pushed)"]
         B --> C["cd.yml: mvnw verify,\ndocker build + push to GHCR\n(SHA tag always, semver on v* tags,\nlatest only from master)"]
-        C --> D[(ghcr.io/asutosh-patnaik/\nclaude-full-learning)]
+        C --> D[(ghcr.io/asutosh-patnaik/\njava-spring-auth-service-claude)]
     end
 
     D -.->|"manual: developer runs\nscripts/deploy.sh <env>"| E
@@ -22,7 +22,7 @@ flowchart TB
         E["scripts/start.sh\n(minikube + ingress + metrics-server addons)"]
         F["scripts/observability.sh\n(kube-prometheus-stack + Loki + Promtail,\nonce per cluster, optional)"]
         G["scripts/deploy.sh <dev|test|production>\nhelm upgrade --install → rollout wait →\nhealth check → Newman smoke tests →\nauto-rollback on any failure"]
-        H[(minikube: app + Mongo\nvia helm/claude-full-learning)]
+        H[(minikube: app + Mongo\nvia helm/java-spring-auth-service-claude)]
         I[(Prometheus + Grafana + Loki\nin the monitoring namespace)]
 
         E --> G
@@ -48,7 +48,7 @@ manual step behind a script that adds health checks, smoke tests, and automatic 
 - **`k8s/`** — the original, minimal plain manifests (`mongo.yaml`, `app.yaml`, `secret.yaml`).
   Untouched by this work, still fully functional, still the simplest possible way to get the app
   running on minikube for a first look.
-- **`helm/claude-full-learning/`** — the path documented here: per-environment values, Ingress, HPA,
+- **`helm/java-spring-auth-service-claude/`** — the path documented here: per-environment values, Ingress, HPA,
   ServiceMonitor/Grafana-dashboard hooks, and the `scripts/*.sh` automation built around it. This is
   the recommended path for anything beyond the original minimal demo.
 
@@ -60,7 +60,7 @@ Neither replaces the other; see [`../k8s/`](../k8s/) for the plain-manifest path
 |---|---|
 | CI (build/test/coverage/package/docker build, not pushed) | `.github/workflows/ci.yml` |
 | CD (build + push to GHCR) | `.github/workflows/cd.yml` |
-| Helm chart | `helm/claude-full-learning/` |
+| Helm chart | `helm/java-spring-auth-service-claude/` |
 | Local automation | `scripts/*.sh` (+ shared helpers in `scripts/lib/`) |
 | Observability stack install | `scripts/observability.sh` |
 | Setup / deployment / rollback / troubleshooting details | the other files in this `docs/` directory |

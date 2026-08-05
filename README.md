@@ -1,4 +1,4 @@
-# claude-full-learning
+# java-spring-auth-service-claude
 
 A Spring Boot REST API for user registration and authentication, built around JWT bearer tokens with
 server-side session revocation, RSA key rotation, and per-IP rate limiting — MongoDB-backed, Java 17.
@@ -63,7 +63,7 @@ docker run -d --name login-mongo -p 27017:27017 mongo:7
 ```bash
 docker run -d --name login-mongo -p 27017:27017 mongo:7
 ./mvnw -DskipTests package
-java -jar target/claude-full-learning-1.0-SNAPSHOT.jar
+java -jar target/java-spring-auth-service-claude-1.0-SNAPSHOT.jar
 ```
 
 ### Option 3: Docker Compose (app + MongoDB, both containerized)
@@ -237,9 +237,9 @@ addition.
 ```bash
 # 1. Build the image and load it into minikube's local image cache (no registry involved —
 #    the Deployment's imagePullPolicy: Never expects the image to already be there)
-docker build -t claude-full-learning:latest .
+docker build -t java-spring-auth-service-claude:latest .
 minikube start   # if not already running
-minikube image load claude-full-learning:latest
+minikube image load java-spring-auth-service-claude:latest
 
 # 2. Deploy
 kubectl apply -f k8s/mongo.yaml
@@ -251,7 +251,7 @@ kubectl get pods -w
 
 # 4. Reach it (keep this running in its own terminal — on macOS with the Docker driver,
 #    minikube's tunnel needs the process to stay alive)
-minikube service claude-full-learning --url
+minikube service java-spring-auth-service-claude --url
 ```
 
 Hit the URL that prints with the same requests as the [API reference](#api-reference) above. Tear down with:
@@ -265,15 +265,15 @@ This was deployed and verified end-to-end (register → login → `/users/me`, i
 
 ## Deploying with Helm
 
-`helm/claude-full-learning/` is a full Helm chart — Deployment, Service, ConfigMap, Secret, Ingress, HPA,
+`helm/java-spring-auth-service-claude/` is a full Helm chart — Deployment, Service, ConfigMap, Secret, Ingress, HPA,
 and an in-chart Mongo, with `values-{dev,test,production}.yaml` overlays — and is the recommended path for
 anything beyond the plain-manifest demo above (real HTTP health probes, per-environment config, autoscaling,
 and hooks for the observability stack below). It doesn't replace `k8s/`; both are kept, on purpose.
 
 ```bash
 ./scripts/start.sh                                                       # minikube + required addons
-cp helm/claude-full-learning/values-secrets.yaml.example \
-   helm/claude-full-learning/values-dev.secrets.yaml                     # fill in real RSA keys, gitignored
+cp helm/java-spring-auth-service-claude/values-secrets.yaml.example \
+   helm/java-spring-auth-service-claude/values-dev.secrets.yaml                     # fill in real RSA keys, gitignored
 ./scripts/deploy.sh dev --source local                                   # build, deploy, health-check, smoke-test
 ```
 
@@ -299,15 +299,15 @@ on a `helm upgrade` — see [`docs/deployment.md`](docs/deployment.md) for the e
 
 ## Testing with Postman
 
-`postman/claude-full-learning.postman_collection.json` covers every scenario in the API reference above,
+`postman/java-spring-auth-service-claude.postman_collection.json` covers every scenario in the API reference above,
 plus a few that aren't (session revocation end-to-end: change password, confirm the old token is dead,
 confirm a fresh login works; rate-limit exhaustion). Import it into Postman, or run it headless with
 [Newman](https://github.com/postmanlabs/newman):
 
 ```bash
-npx newman run postman/claude-full-learning.postman_collection.json
+npx newman run postman/java-spring-auth-service-claude.postman_collection.json
 # against something other than localhost:8080, e.g. the minikube deployment above:
-npx newman run postman/claude-full-learning.postman_collection.json --env-var baseUrl=http://<host>:<port>
+npx newman run postman/java-spring-auth-service-claude.postman_collection.json --env-var baseUrl=http://<host>:<port>
 ```
 
 Requests run in a specific order within the collection (Register → Login → Users) because later ones depend
@@ -362,7 +362,7 @@ src/main/java/org/example/
 Dockerfile               Multi-stage build (JDK to compile, JRE to run)
 docker-compose.yml        App + MongoDB, for local containerized dev
 k8s/                      Plain Kubernetes manifests (mongo, app-secrets, app) for minikube
-helm/claude-full-learning/  Helm chart - the recommended path beyond the plain k8s/ demo
+helm/java-spring-auth-service-claude/  Helm chart - the recommended path beyond the plain k8s/ demo
 scripts/                  Local CD automation: start/deploy/test/rollback/destroy/observability
 docs/                     Architecture, setup, deployment, rollback, troubleshooting
 postman/                  Postman collection covering the full API + edge cases
@@ -432,7 +432,7 @@ Pull requests in this repository are also automatically reviewed by Claude via G
 ## Continuous deployment
 
 `.github/workflows/cd.yml` builds and pushes images to
-`ghcr.io/asutosh-patnaik/claude-full-learning` on push to `master` and on `v*` tags, using the repo's
+`ghcr.io/asutosh-patnaik/java-spring-auth-service-claude` on push to `master` and on `v*` tags, using the repo's
 own `GITHUB_TOKEN` (no extra secret to configure). Immutable full-SHA tag always; semver tags only on
 `v*` tags; a floating `latest` tag only from `master`. It's deliberately a separate workflow from
 `ci.yml`, not a later job appended to it — see [CLAUDE.md's Continuous deployment

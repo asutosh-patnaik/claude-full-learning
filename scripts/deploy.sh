@@ -9,7 +9,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/health.sh"
 source "${SCRIPT_DIR}/lib/smoke.sh"
 
-IMAGE_REPOSITORY_DEFAULT="ghcr.io/asutosh-patnaik/claude-full-learning"
+IMAGE_REPOSITORY_DEFAULT="ghcr.io/asutosh-patnaik/java-spring-auth-service-claude"
 SERVICE_PORT=8080
 
 usage() {
@@ -30,7 +30,7 @@ Environment variables (--source ghcr only, for a private GHCR package):
   GHCR_PULL_PAT         A GitHub PAT with read:packages, used to create an imagePullSecret.
   GHCR_PULL_USERNAME    The GitHub username that PAT belongs to. Both required together.
 
-Requires helm/claude-full-learning/values-<env>.secrets.yaml to already exist (never committed -
+Requires helm/java-spring-auth-service-claude/values-<env>.secrets.yaml to already exist (never committed -
 see values-secrets.yaml.example and docs/deployment.md).
 EOF
 }
@@ -58,7 +58,7 @@ SECRETS_FILE="${CHART_DIR}/values-${ENVIRONMENT}.secrets.yaml"
 
 if [[ ! -f "$SECRETS_FILE" ]]; then
   log_error "missing ${SECRETS_FILE}"
-  log_error "copy helm/claude-full-learning/values-secrets.yaml.example to that path and fill in real values (never commit it) - see docs/deployment.md"
+  log_error "copy helm/java-spring-auth-service-claude/values-secrets.yaml.example to that path and fill in real values (never commit it) - see docs/deployment.md"
   exit 1
 fi
 
@@ -86,10 +86,10 @@ case "$SOURCE" in
     fi
     ;;
   local)
-    log_info "building local image claude-full-learning:${TAG} and loading into minikube..."
-    docker build -t "claude-full-learning:${TAG}" "$REPO_ROOT"
-    minikube image load "claude-full-learning:${TAG}"
-    IMAGE_ARGS+=(--set "image.repository=claude-full-learning" --set "image.tag=${TAG}" --set "image.pullPolicy=Never")
+    log_info "building local image java-spring-auth-service-claude:${TAG} and loading into minikube..."
+    docker build -t "java-spring-auth-service-claude:${TAG}" "$REPO_ROOT"
+    minikube image load "java-spring-auth-service-claude:${TAG}"
+    IMAGE_ARGS+=(--set "image.repository=java-spring-auth-service-claude" --set "image.tag=${TAG}" --set "image.pullPolicy=Never")
     ;;
   *)
     log_error "unknown --source '${SOURCE}' - must be 'ghcr' or 'local'"
@@ -142,7 +142,7 @@ kubectl rollout status "deployment/${RELEASE_NAME}" -n "$NAMESPACE" --timeout=12
 
 log_info "starting port-forward on localhost:${LOCAL_PORT} for health/smoke checks..."
 kubectl port-forward -n "$NAMESPACE" "svc/${RELEASE_NAME}" "${LOCAL_PORT}:${SERVICE_PORT}" \
-  > /tmp/claude-full-learning-deploy-portforward.log 2>&1 &
+  > /tmp/java-spring-auth-service-claude-deploy-portforward.log 2>&1 &
 PORT_FORWARD_PID=$!
 sleep 3
 

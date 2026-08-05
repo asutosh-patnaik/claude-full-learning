@@ -1,4 +1,4 @@
-# claude-full-learning Helm chart
+# java-spring-auth-service-claude Helm chart
 
 Parallel to the plain `k8s/` manifests (kept as-is, untouched) — this is the recommended path for
 anything beyond the original minimal demo: per-environment values, Ingress, HPA, and observability
@@ -13,9 +13,9 @@ environment overlay, and an **untracked** secrets overlay (real values are never
 
 ```bash
 cp values-secrets.yaml.example values-dev.secrets.yaml   # fill in real values, never commit this file
-helm upgrade --install claude-full-learning . \
+helm upgrade --install java-spring-auth-service-claude . \
   -f values-dev.yaml -f values-dev.secrets.yaml \
-  -n claude-full-learning-dev --wait --timeout 5m
+  -n java-spring-auth-service-claude-dev --wait --timeout 5m
 ```
 
 Swap `values-dev.yaml`/`values-dev.secrets.yaml` for `values-test.yaml`/`values-test.secrets.yaml` or
